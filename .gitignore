@@ -1,0 +1,56 @@
+node_modules
+.env
+coverage
+coverage.json
+typechain
+typechain-types
+cache
+artifacts
+dist
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Hardhat
+cache/
+artifacts/
+deployments/localhost/
+deployments/hardhat/
+
+# Frontend
+frontend/build/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Misc
+*.tgz
+*.tar.gz
+.cache/
+.parcel-cache/
+.env
+.node_modules
+
+35127266008152230287761209727211507096682063164260802445112431263919177634415
