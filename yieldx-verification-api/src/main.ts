@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
+import axios from 'axios';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -68,7 +69,7 @@ async function bootstrap() {
       'api-key',
     )
     .addServer('http://localhost:3000', 'Development server')
-    .addServer('https://api.yieldx.finance', 'Production server')
+    .addServer('https://yieldx.onrender.com', 'Production server')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
@@ -84,6 +85,14 @@ async function bootstrap() {
   });
 
   await app.listen(port);
+
+  // Self-ping every 15 minutes to keep the service alive (for Render free tier)
+  const PING_URL = process.env.PING_URL || `http://localhost:${port}/ping`;
+  setInterval(() => {
+    axios.get(PING_URL)
+      .then(() => console.log(`[Self-Ping] Pinged ${PING_URL} to keep service alive.`))
+      .catch((err) => console.error('[Self-Ping] Ping failed:', err.message));
+  }, 15 * 60 * 1000); // 15 minutes
 
   console.log('🚀 YieldX Verification API running on port', port);
   console.log(`📋 API Documentation: http://localhost:${port}/docs`);
