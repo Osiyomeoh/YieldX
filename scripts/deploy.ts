@@ -1,344 +1,445 @@
+// scripts/deploy-stack-safe.ts - Deploys stack-safe YieldX Protocol
 import hre from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 
 // Sepolia Testnet Chainlink Addresses
 const CHAINLINK_ADDRESSES = {
-    // Price Feeds
     ETH_USD_FEED: "0x694AA1769357215DE4FAC081bf1f309aDC325306",
     BTC_USD_FEED: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43", 
     USDC_USD_FEED: "0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E",
     LINK_USD_FEED: "0xc59E3633BAAC79493d908e63626716e204A45EdF",
-    
-    // VRF
     VRF_COORDINATOR: "0x8103B0A8A00be2DDC778e6e7eaa21791Cd364625",
     VRF_KEY_HASH: "0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c",
-    
-    // Functions
     FUNCTIONS_ROUTER: "0xb83E47C2bC239B3bf370bc41e1459A34b41238D0"
 };
 
-// Your Subscription IDs
+// Your subscription IDs
 const VRF_SUBSCRIPTION_ID = "35127266008152230287761209727211507096682063164260802445112431263919177634415";
 const FUNCTIONS_SUBSCRIPTION_ID = 4996;
 
+async function analyzeConstructor(contractName: string) {
+    try {
+        const factory = await hre.ethers.getContractFactory(contractName);
+        const iface = factory.interface;
+        const constructor = iface.fragments.find(f => f.type === 'constructor');
+        
+        if (constructor && 'inputs' in constructor) {
+            console.log(`📋 ${contractName} Constructor Analysis:`);
+            console.log(`   Parameters: ${constructor.inputs.length}`);
+            constructor.inputs.forEach((input, index) => {
+                console.log(`   ${index + 1}. ${input.name || `param${index + 1}`} (${input.type})`);
+            });
+            return constructor.inputs;
+        }
+        
+        console.log(`📋 ${contractName}: No constructor parameters`);
+        return [];
+    } catch (error) {
+        console.log(`❌ Contract ${contractName} not found: ${error.message}`);
+        return null;
+    }
+}
+
+async function deployContract(contractName: string, args: any[] = [], description: string = "") {
+    console.log(`\n🏗️ Deploying ${contractName}${description ? ` (${description})` : ''}...`);
+    
+    const factory = await hre.ethers.getContractFactory(contractName);
+    console.log(`📝 Deploying with ${args.length} arguments...`);
+    
+    const contract = await factory.deploy(...args);
+    await contract.waitForDeployment();
+    
+    const address = await contract.getAddress();
+    console.log(`✅ ${contractName} deployed: ${address}`);
+    
+    return { contract, address };
+}
+
 async function main() {
-    console.log("🚀 Starting YieldX Enhanced Deployment with Committee Management...");
-    console.log("Network:", hre.network.name);
+    console.log("🚀 Starting Stack-Safe YieldX Protocol Deployment...\n");
     
     const [deployer] = await hre.ethers.getSigners();
-    console.log("Deployer:", deployer.address);
-    console.log("Balance:", hre.ethers.formatEther(await hre.ethers.provider.getBalance(deployer.address)));
+    const network = await hre.ethers.provider.getNetwork();
     
-    // Track all deployed contracts
+    console.log("📋 Deployment Configuration:");
+    console.log(`   Network: ${network.name} (Chain ID: ${network.chainId})`);
+    console.log(`   Deployer: ${deployer.address}`);
+    
+    const balance = await hre.ethers.provider.getBalance(deployer.address);
+    console.log(`   Balance: ${hre.ethers.formatEther(balance)} ETH`);
+    
+    if (balance < hre.ethers.parseEther("0.2")) {
+        console.log("⚠️  Warning: Low ETH balance for deployment");
+    }
+    
     const deployedContracts: any = {};
     
     try {
-        // Step 1: Deploy ChainlinkFallbackContract
-        console.log("\n📊 Step 1: Deploying ChainlinkFallbackContract...");
-        const ChainlinkFallbackContract = await hre.ethers.getContractFactory("ChainlinkFallbackContract");
-        const fallbackContract = await ChainlinkFallbackContract.deploy();
-        await fallbackContract.waitForDeployment();
-        const fallbackAddress = await fallbackContract.getAddress();
-        deployedContracts.fallbackContract = fallbackAddress;
-        console.log("✅ ChainlinkFallbackContract deployed:", fallbackAddress);
-        
-        // Step 2: Deploy MockUSDC
-        console.log("\n💰 Step 2: Deploying MockUSDC...");
-        const MockUSDC = await hre.ethers.getContractFactory("MockUSDC");
-        const mockUSDC = await MockUSDC.deploy();
-        await mockUSDC.waitForDeployment();
-        const usdcAddress = await mockUSDC.getAddress();
+        console.log("\n" + "=".repeat(60));
+        console.log("🏗️  PHASE 1: CORE INFRASTRUCTURE");
+        console.log("=".repeat(60));
+
+        // Step 1: Deploy MockUSDC
+        const { contract: mockUSDC, address: usdcAddress } = await deployContract("MockUSDC", [], "Test USDC Token");
         deployedContracts.mockUSDC = usdcAddress;
-        console.log("✅ MockUSDC deployed:", usdcAddress);
-        
-        // Step 3: Deploy YieldXInvoiceNFT
-        console.log("\n🎨 Step 3: Deploying YieldXInvoiceNFT...");
-        const YieldXInvoiceNFT = await hre.ethers.getContractFactory("YieldXInvoiceNFT");
-        const invoiceNFT = await YieldXInvoiceNFT.deploy();
-        await invoiceNFT.waitForDeployment();
-        const nftAddress = await invoiceNFT.getAddress();
+
+        // Step 2: Deploy YieldXInvoiceNFT
+        const { contract: invoiceNFT, address: nftAddress } = await deployContract("YieldXInvoiceNFT", [], "Invoice NFT Contract");
         deployedContracts.invoiceNFT = nftAddress;
-        console.log("✅ YieldXInvoiceNFT deployed:", nftAddress);
-        
-        // Step 4: Deploy YieldXPriceManagerFixed
-        console.log("\n📈 Step 4: Deploying YieldXPriceManagerFixed...");
-        const YieldXPriceManagerFixed = await hre.ethers.getContractFactory("YieldXPriceManager");
-        const priceManager = await YieldXPriceManagerFixed.deploy(
-            CHAINLINK_ADDRESSES.ETH_USD_FEED,
-            CHAINLINK_ADDRESSES.USDC_USD_FEED,
-            CHAINLINK_ADDRESSES.BTC_USD_FEED,
-            CHAINLINK_ADDRESSES.LINK_USD_FEED
+
+        // Step 3: Deploy YieldXPriceManager
+        const { contract: priceManager, address: priceManagerAddress } = await deployContract(
+            "YieldXPriceManager",
+            [
+                CHAINLINK_ADDRESSES.ETH_USD_FEED,
+                CHAINLINK_ADDRESSES.USDC_USD_FEED,
+                CHAINLINK_ADDRESSES.BTC_USD_FEED,
+                CHAINLINK_ADDRESSES.LINK_USD_FEED
+            ],
+            "Price Feeds Manager"
         );
-        await priceManager.waitForDeployment();
-        const priceManagerAddress = await priceManager.getAddress();
         deployedContracts.priceManager = priceManagerAddress;
-        console.log("✅ YieldXPriceManagerFixed deployed:", priceManagerAddress);
-        
-        // Step 5: Deploy YieldXRiskCalculator
+
+        // Step 4: Deploy ChainlinkFallbackContract first (required for YieldXRiskCalculator)
+        console.log("\n🛡️ Step 4: Deploying ChainlinkFallbackContract...");
+        const { contract: fallbackContract, address: fallbackAddress } = await deployContract(
+            "ChainlinkFallbackContract", 
+            [], 
+            "Chainlink Fallback Data Provider"
+        );
+        deployedContracts.fallbackContract = fallbackAddress;
+
+        // Step 5: Deploy YieldXRiskCalculator with both required parameters
         console.log("\n⚖️ Step 5: Deploying YieldXRiskCalculator...");
-        const YieldXRiskCalculator = await hre.ethers.getContractFactory("YieldXRiskCalculator");
-        const riskCalculator = await YieldXRiskCalculator.deploy(
-            fallbackAddress,
-            priceManagerAddress
+        await analyzeConstructor("YieldXRiskCalculator");
+        
+        const { contract: riskCalculator, address: riskCalculatorAddress } = await deployContract(
+            "YieldXRiskCalculator",
+            [fallbackAddress, priceManagerAddress], // Both required parameters
+            "Risk Assessment Calculator"
         );
-        await riskCalculator.waitForDeployment();
-        const riskCalculatorAddress = await riskCalculator.getAddress();
         deployedContracts.riskCalculator = riskCalculatorAddress;
-        console.log("✅ YieldXRiskCalculator deployed:", riskCalculatorAddress);
+
+        console.log("\n" + "=".repeat(60));
+        console.log("🔍 PHASE 2: ARCHITECTURE DETECTION");
+        console.log("=".repeat(60));
+
+        // Check if modular contracts exist
+        const verificationParams = await analyzeConstructor("YieldXVerificationModule");
+        const investmentParams = await analyzeConstructor("YieldXInvestmentModule");
+        const vrfParams = await analyzeConstructor("YieldXVRFModule");
         
-        // Step 6: Deploy Enhanced YieldXCore
-        console.log("\n🏗️ Step 6: Deploying Enhanced YieldXCore with Committee Management...");
-        const YieldXCore = await hre.ethers.getContractFactory("YieldXCore");
-        const yieldXCore = await YieldXCore.deploy(
-            nftAddress,
-            usdcAddress,
-            priceManagerAddress,
-            riskCalculatorAddress,
-            CHAINLINK_ADDRESSES.VRF_COORDINATOR,
-            CHAINLINK_ADDRESSES.VRF_KEY_HASH,
-            VRF_SUBSCRIPTION_ID,
-            CHAINLINK_ADDRESSES.FUNCTIONS_ROUTER,
-            FUNCTIONS_SUBSCRIPTION_ID
-        );
-        await yieldXCore.waitForDeployment();
-        const coreAddress = await yieldXCore.getAddress();
-        deployedContracts.yieldXCore = coreAddress;
-        console.log("✅ Enhanced YieldXCore deployed:", coreAddress);
+        const isModular = verificationParams !== null && investmentParams !== null && vrfParams !== null;
         
-        // Step 7: Initialize Contracts
-        console.log("\n🔧 Step 7: Initializing contracts...");
+        if (isModular) {
+            console.log("📋 Detected MODULAR architecture - deploying modules...");
+            
+            // Deploy modules
+            const { contract: verificationModule, address: verificationAddress } = await deployContract(
+                "YieldXVerificationModule",
+                [
+                    CHAINLINK_ADDRESSES.FUNCTIONS_ROUTER,
+                    FUNCTIONS_SUBSCRIPTION_ID
+                ],
+                "Document Verification Module"
+            );
+            deployedContracts.verificationModule = verificationAddress;
+
+            const { contract: investmentModule, address: investmentAddress } = await deployContract(
+                "YieldXInvestmentModule",
+                [usdcAddress],
+                "Investment Management Module"
+            );
+            deployedContracts.investmentModule = investmentAddress;
+
+            const { contract: vrfModule, address: vrfAddress } = await deployContract(
+                "YieldXVRFModule",
+                [
+                    CHAINLINK_ADDRESSES.VRF_COORDINATOR,
+                    CHAINLINK_ADDRESSES.VRF_KEY_HASH,
+                    VRF_SUBSCRIPTION_ID,
+                    riskCalculatorAddress
+                ],
+                "VRF and APR Module"
+            );
+            deployedContracts.vrfModule = vrfAddress;
+
+            console.log("\n" + "=".repeat(60));
+            console.log("🎯 PHASE 3: MODULAR CORE DEPLOYMENT");
+            console.log("=".repeat(60));
+
+            // Deploy modular YieldXCore
+            const { contract: yieldXCore, address: coreAddress } = await deployContract(
+                "YieldXCore",
+                [
+                    nftAddress,              // _invoiceNFT
+                    usdcAddress,             // _usdcToken
+                    priceManagerAddress,     // _priceManager
+                    verificationAddress,     // _verificationModule
+                    investmentAddress,       // _investmentModule
+                    vrfAddress               // _vrfModule
+                ],
+                "Modular Core Contract"
+            );
+            deployedContracts.yieldXCore = coreAddress;
+
+            console.log("\n🔗 Initializing modular connections...");
+            console.log("\n🔗 Initializing modular connections...");
+// Check core contract status before setting
+const verificationCore = await verificationModule.coreContract();
+if (verificationCore === "0x0000000000000000000000000000000000000000") {
+    await verificationModule.setCoreContract(coreAddress);
+    console.log("✅ VerificationModule core contract set");
+} else {
+    console.log(`⚠️ VerificationModule core contract already set to: ${verificationCore}`);
+}
+
+const investmentCore = await investmentModule.coreContract();
+if (investmentCore === "0x0000000000000000000000000000000000000000") {
+    await investmentModule.setCoreContract(coreAddress);
+    console.log("✅ InvestmentModule core contract set");
+} else {
+    console.log(`⚠️ InvestmentModule core contract already set to: ${investmentCore}`);
+}
+
+const vrfCore = await vrfModule.coreContract();
+if (vrfCore === "0x0000000000000000000000000000000000000000") {
+    await vrfModule.setCoreContract(coreAddress);
+    console.log("✅ VRFModule core contract set");
+} else {
+    console.log(`⚠️ VRFModule core contract already set to: ${vrfCore}`);
+}
+
+await invoiceNFT.setProtocolAddress(coreAddress);
+console.log("✅ InvoiceNFT protocol address set");
+
+await yieldXCore.initializeProtocol();
+console.log("✅ All modules connected and initialized!");
+            await verificationModule.setCoreContract(coreAddress);
+            await investmentModule.setCoreContract(coreAddress);
+            await vrfModule.setCoreContract(coreAddress);
+            await yieldXCore.initializeProtocol();
+            console.log("✅ All modules connected and initialized!");
+
+        } else {
+            console.log("📋 Detected SINGLE CONTRACT architecture - analyzing YieldXCore...");
+            
+            const coreParams = await analyzeConstructor("YieldXCore");
+            
+            if (!coreParams) {
+                throw new Error("YieldXCore contract not found!");
+            }
+
+            console.log("\n" + "=".repeat(60));
+            console.log("🎯 PHASE 3: SINGLE CORE DEPLOYMENT");
+            console.log("=".repeat(60));
+
+            let coreArgs: any[] = [];
+            
+            if (coreParams.length === 9) {
+                console.log("📝 Detected 9-parameter constructor (Full Features):");
+                coreArgs = [
+                    nftAddress,                                 // _invoiceNFT
+                    usdcAddress,                                // _usdcToken
+                    priceManagerAddress,                        // _priceManager
+                    riskCalculatorAddress,                      // _riskCalculator
+                    CHAINLINK_ADDRESSES.VRF_COORDINATOR,        // _vrfCoordinator
+                    CHAINLINK_ADDRESSES.VRF_KEY_HASH,           // _keyHash
+                    VRF_SUBSCRIPTION_ID,                        // _vrfSubscriptionId
+                    CHAINLINK_ADDRESSES.FUNCTIONS_ROUTER,       // _functionsRouter
+                    FUNCTIONS_SUBSCRIPTION_ID                   // _functionsSubscriptionId
+                ];
+            } else if (coreParams.length === 6) {
+                console.log("📝 Detected 6-parameter constructor (Simplified):");
+                coreArgs = [
+                    nftAddress,                                 // _invoiceNFT
+                    usdcAddress,                                // _usdcToken
+                    priceManagerAddress,                        // _priceManager
+                    riskCalculatorAddress,                      // _riskCalculator
+                    CHAINLINK_ADDRESSES.VRF_COORDINATOR,        // _vrfCoordinator
+                    CHAINLINK_ADDRESSES.FUNCTIONS_ROUTER        // _functionsRouter
+                ];
+            } else {
+                throw new Error(`Unsupported constructor with ${coreParams.length} parameters`);
+            }
+
+            const { contract: yieldXCore, address: coreAddress } = await deployContract(
+                "YieldXCore",
+                coreArgs,
+                "Single Contract"
+            );
+            deployedContracts.yieldXCore = coreAddress;
+
+            console.log("\n🔗 Initializing protocol...");
+            await yieldXCore.initializeNFTProtocol();
+            console.log("✅ Protocol initialized!");
+        }
+
+        console.log("\n" + "=".repeat(60));
+        console.log("💰 PHASE 4: TEST ENVIRONMENT SETUP");
+        console.log("=".repeat(60));
+
+        console.log("📝 Minting test USDC tokens...");
+        const testAmount = hre.ethers.parseUnits("1000000", 6);
+        await mockUSDC.mint(deployer.address, testAmount);
+        console.log(`✅ Minted ${hre.ethers.formatUnits(testAmount, 6)} test USDC`);
+
+        console.log("📝 Approving USDC spending...");
+        await mockUSDC.approve(deployedContracts.yieldXCore, testAmount);
+        console.log("✅ USDC spending approved");
+
+        console.log("\n" + "=".repeat(60));
+        console.log("🧪 PHASE 5: DEPLOYMENT VERIFICATION");
+        console.log("=".repeat(60));
+
+        const yieldXCore = await hre.ethers.getContractAt("YieldXCore", deployedContracts.yieldXCore);
         
-        // Set YieldXCore as protocol for NFT contract
-        console.log("📝 Setting YieldXCore as NFT protocol...");
-        await yieldXCore.initializeNFTProtocol();
-        console.log("✅ NFT protocol permission granted");
+        console.log("📋 Verifying contract integration...");
         
-        // Mint some USDC for testing
-        console.log("💰 Minting test USDC...");
-        await mockUSDC.mint(deployer.address, hre.ethers.parseUnits("1000000", 6)); // 1M USDC
-        await mockUSDC.transfer(coreAddress, hre.ethers.parseUnits("500000", 6)); // Fund protocol
-        console.log("✅ Test USDC minted and transferred");
-        
-        // Step 8: Test Enhanced Committee Management
-        console.log("\n👥 Step 8: Testing Enhanced Committee Management...");
-        
-        // Add deployer as committee member
-        console.log("➕ Adding deployer as committee member...");
-        const addTx = await yieldXCore.addCommitteeMember(deployer.address);
-        const addReceipt = await addTx.wait();
-        console.log("✅ Committee member added - TX:", addReceipt.hash);
-        
-        // Test committee functions
-        console.log("🔍 Testing committee functions...");
-        
-        // Get committee members
-        const committeeMembers = await yieldXCore.getCommitteeMembers();
-        console.log(`📋 Committee members (${committeeMembers.length}):`, committeeMembers);
-        
-        // Get committee size
-        const committeeSize = await yieldXCore.getCommitteeSize();
-        console.log(`👥 Committee size: ${committeeSize}`);
-        
-        // Check if deployer is committee member
-        const isCommitteeMember = await yieldXCore.isCommitteeMember(deployer.address);
-        console.log(`✅ Deployer is committee member: ${isCommitteeMember}`);
-        
-        // Test protocol statistics
-        console.log("📊 Testing protocol statistics...");
-        const stats = await yieldXCore.getProtocolStats();
-        console.log(`📈 Protocol Stats - Total Invoices: ${stats.totalInvoices}, Committee: ${stats.totalCommitteeMembers}, Funds Raised: $${hre.ethers.formatUnits(stats.totalFundsRaised, 6)}`);
-        
-        // Step 9: Test Enhanced Price Management
-        console.log("\n📈 Step 9: Testing Enhanced Price Management...");
-        
-        // Test individual feeds
-        console.log("📡 Testing individual price feeds...");
         try {
-            const ethFeed = await priceManager.testEthFeed();
-            console.log(`ETH Feed: $${Number(ethFeed.price) / 1e8} - ${ethFeed.status}`);
+            const version = await yieldXCore.version();
+            console.log(`✅ Protocol Version: ${version}`);
             
-            const btcFeed = await priceManager.testBtcFeed();
-            console.log(`BTC Feed: $${Number(btcFeed.price) / 1e8} - ${btcFeed.status}`);
+            const stats = await yieldXCore.getProtocolStats();
+            console.log(`✅ Protocol Stats: ${stats[0]} invoices, $${hre.ethers.formatUnits(stats[1], 6)} funding`);
             
-            const usdcFeed = await priceManager.testUsdcFeed();
-            console.log(`USDC Feed: $${Number(usdcFeed.price) / 1e8} - ${usdcFeed.status}`);
+            // Test stack-safe functions
+            console.log("🔍 Testing stack-safe view functions...");
             
-            const linkFeed = await priceManager.testLinkFeed();
-            console.log(`LINK Feed: $${Number(linkFeed.price) / 1e8} - ${linkFeed.status}`);
+            // Test basic function first
+            const contractInfo = await yieldXCore.getContractInfo();
+            console.log(`✅ Contract Info: ${contractInfo[0]} - ${contractInfo[1]}`);
+            
+            // Test invoice submission
+            console.log("📝 Testing invoice submission...");
+            const testInvoice = await yieldXCore.submitInvoice(
+                deployer.address, // buyer
+                hre.ethers.parseUnits("50000", 6), // $50,000
+                "Coffee Beans", // commodity
+                "Kenya", // supplier country
+                "USA", // buyer country
+                "Kenyan Coffee Co.", // exporter name
+                "US Coffee Corp.", // buyer name
+                Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // due date (30 days)
+                "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" // document hash
+            );
+            await testInvoice.wait();
+            console.log("✅ Test invoice submitted");
+            
+            // Test stack-safe view functions
+            console.log("🔍 Testing stack-safe invoice functions...");
+            const basics = await yieldXCore.getInvoiceBasics(1);
+            console.log(`✅ Invoice Basics: ID=${basics[0]}, Amount=$${hre.ethers.formatUnits(basics[2], 6)}, Status=${basics[3]}`);
+            
+            const parties = await yieldXCore.getInvoiceParties(1);
+            console.log(`✅ Invoice Parties: Buyer=${parties[0]}, Commodity=${parties[3]}`);
             
         } catch (error) {
-            console.log("⚠️ Individual feed testing failed:", error.message);
+            console.log(`⚠️ Some verification tests failed: ${error.message}`);
         }
-        
-        // Test price manager update
-        console.log("\n🔄 Testing live price update...");
-        try {
-            const updateTx = await priceManager.updateLivePrices();
-            const receipt = await updateTx.wait();
-            console.log(`✅ Update transaction: ${receipt.hash}`);
-            
-            const [ethPrice, usdcPrice, btcPrice, linkPrice] = await priceManager.getLatestPrices();
-            console.log(`📊 LIVE PRICES - ETH: $${Number(ethPrice) / 1e8}, USDC: $${Number(usdcPrice) / 1e8}, BTC: $${Number(btcPrice) / 1e8}, LINK: $${Number(linkPrice) / 1e8}`);
-            
-            const volatility = await priceManager.calculateMarketVolatility();
-            console.log(`📈 Market volatility: ${Number(volatility) / 100}%`);
-            
-            const initialFetched = await priceManager.initialPricesFetched();
-            console.log(`🔥 Initial prices fetched from Chainlink: ${initialFetched}`);
-            
-        } catch (error) {
-            console.log("❌ Price update failed:", error.message);
-            console.log("📊 Using default fallback prices for testing");
-        }
-        
-        // Step 10: Test Enhanced Invoice Submission
-        console.log("\n📄 Step 10: Testing Enhanced Invoice Submission...");
-        
-        console.log("📝 Submitting test invoice...");
-        const invoiceTx = await yieldXCore.submitInvoice(
-            deployer.address, // buyer
-            hre.ethers.parseUnits("10000", 6), // $10,000
-            "Coffee Beans", // commodity
-            "Kenya", // supplier country
-            "USA", // buyer country
-            "Kenyan Coffee Co.", // exporter name
-            "US Import Corp.", // buyer name
-            Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // due date (30 days)
-        );
-        const invoiceReceipt = await invoiceTx.wait();
-        console.log("✅ Test invoice submitted - TX:", invoiceReceipt.hash);
-        
-        // Get invoice details using enhanced function
-        console.log("🔍 Testing enhanced invoice details...");
-        const invoiceDetails = await yieldXCore.getInvoiceDetails(1);
-        console.log(`📋 Invoice 1 - Amount: $${hre.ethers.formatUnits(invoiceDetails.amount, 6)}, Commodity: ${invoiceDetails.commodity}, Exporter: ${invoiceDetails.exporterName}`);
-        
-        // Test getting all invoices
-        const allInvoices = await yieldXCore.getAllInvoices();
-        console.log(`📚 All invoices: [${allInvoices.join(', ')}]`);
-        
-        // Test getting invoices by status
-        const submittedInvoices = await yieldXCore.getInvoicesByStatus(0); // Submitted = 0
-        console.log(`📝 Submitted invoices: [${submittedInvoices.join(', ')}]`);
-        
-        // Step 11: Test Risk Calculator
-        console.log("\n⚖️ Step 11: Testing Enhanced Risk Calculator...");
-        const testAPR = await riskCalculator.calculateAPR(
-            "Coffee Beans",
-            "Kenya", 
-            "USA",
-            hre.ethers.parseUnits("10000", 6), // $10k
-            Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
-            12345 // mock randomness
-        );
-        console.log(`✅ Risk calculation working - Test APR: ${Number(testAPR) / 100}%`);
-        
-        // Step 12: Test Fallback Contract
-        console.log("\n🛡️ Step 12: Testing Fallback Contract...");
-        const coffeePrice = await fallbackContract.getFallbackCommodityPrice("Coffee Beans");
-        const kenyaRisk = await fallbackContract.getFallbackCountryRisk("Kenya");
-        const pseudoRandom = await fallbackContract.generatePseudoRandomness(
-            1, // invoiceId
-            deployer.address, // sender
-            "Coffee Beans", // commodity
-            "Kenya" // country
-        );
-        console.log(`✅ Fallback data - Coffee: ${Number(coffeePrice) / 100}/kg, Kenya Risk: ${Number(kenyaRisk)}bp, PseudoRandom: ${Number(pseudoRandom)}/1000`);
-        
-        // Step 13: Test Contract Version
-        console.log("\n🔖 Step 13: Testing Contract Version...");
-        const version = await yieldXCore.version();
-        console.log(`📋 Contract version: ${version}`);
-        
-        console.log("\n🎉 All enhanced contracts deployed and tested successfully!");
-        
-        // Step 14: Save Enhanced Deployment Info
-        const deploymentInfo = {
-            network: hre.network.name,
+
+        const currentBlock = await hre.ethers.provider.getBlockNumber();
+
+        console.log("\n" + "=".repeat(60));
+        console.log("🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!");
+        console.log("=".repeat(60));
+
+        // Prepare deployment result
+        const deploymentResult = {
+            network: network.name,
             deployer: deployer.address,
             timestamp: new Date().toISOString(),
-            version: "Enhanced v2.0.0",
-            chainlinkAddresses: CHAINLINK_ADDRESSES,
-            vrfSubscriptionId: VRF_SUBSCRIPTION_ID,
-            functionsSubscriptionId: FUNCTIONS_SUBSCRIPTION_ID,
+            version: isModular ? "YieldXCore v4.1.0 - Stack Safe Modular" : "YieldXCore v4.1.0 - Stack Safe Single",
+            architecture: isModular ? "modular" : "single",
             contracts: deployedContracts,
-            enhancements: {
-                committeeManagement: true,
-                enhancedInvoiceData: true,
-                protocolStatistics: true,
-                gasOptimizations: true,
-                eventLogging: true
+            chainlinkConfig: CHAINLINK_ADDRESSES,
+            subscriptions: {
+                vrfSubscriptionId: VRF_SUBSCRIPTION_ID,
+                functionsSubscriptionId: FUNCTIONS_SUBSCRIPTION_ID
             },
+            deploymentBlock: currentBlock,
             frontendConfig: {
-                YieldXCore: coreAddress,
-                MockUSDC: usdcAddress,
-                YieldXInvoiceNFT: nftAddress,
-                YieldXPriceManager: priceManagerAddress,
-                YieldXRiskCalculator: riskCalculatorAddress,
-                ChainlinkFallbackContract: fallbackAddress,
-                chainId: hre.network.config.chainId
+                YieldXCore: deployedContracts.yieldXCore,
+                MockUSDC: deployedContracts.mockUSDC,
+                YieldXInvoiceNFT: deployedContracts.invoiceNFT,
+                YieldXPriceManager: deployedContracts.priceManager,
+                YieldXRiskCalculator: deployedContracts.riskCalculator,
+                chainId: Number(network.chainId),
+                apiUrl: "https://yieldx.onrender.com",
+                explorerUrl: "https://sepolia.etherscan.io"
             }
         };
-        
-        // Save to file
+
+        // Save deployment info
         const deploymentsDir = path.join(__dirname, "..", "deployments");
         if (!fs.existsSync(deploymentsDir)) {
             fs.mkdirSync(deploymentsDir, { recursive: true });
         }
-        
-        const filename = `${hre.network.name}-enhanced-deployment.json`;
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `${network.name}-stack-safe-${timestamp}.json`;
         const filepath = path.join(deploymentsDir, filename);
-        fs.writeFileSync(filepath, JSON.stringify(deploymentInfo, null, 2));
+        fs.writeFileSync(filepath, JSON.stringify(deploymentResult, null, 2));
+
+        const latestPath = path.join(deploymentsDir, `${network.name}-latest.json`);
+        fs.writeFileSync(latestPath, JSON.stringify(deploymentResult, null, 2));
+
+        console.log("\n📋 DEPLOYMENT SUMMARY");
+        console.log("=====================================");
+        console.log(`Network: ${network.name} (${network.chainId})`);
+        console.log(`Architecture: ${isModular ? 'Modular' : 'Single Contract'}`);
+        console.log(`Deployer: ${deployer.address}`);
+        console.log(`Block: ${currentBlock}`);
+        console.log("=====================================");
         
-        console.log("📄 Enhanced deployment info saved to:", filepath);
+        Object.entries(deployedContracts).forEach(([name, address]) => {
+            console.log(`${name}: ${address}`);
+        });
         
-        // Display summary
-        console.log("\n📋 ENHANCED DEPLOYMENT SUMMARY");
-        console.log("==============================");
-        console.log("🏗️ YieldXCore (Enhanced):", coreAddress);
-        console.log("💰 MockUSDC:", usdcAddress);
-        console.log("🎨 InvoiceNFT:", nftAddress);
-        console.log("📈 PriceManagerFixed:", priceManagerAddress);
-        console.log("⚖️ RiskCalculator:", riskCalculatorAddress);
-        console.log("🛡️ FallbackContract:", fallbackAddress);
-        console.log("==============================");
+        console.log("=====================================");
+        console.log(`📄 Deployment saved: ${filepath}`);
         
-        console.log("\n🆕 NEW ENHANCED FEATURES:");
-        console.log("✅ Committee Management with Array Tracking");
-        console.log("✅ Enhanced Invoice Data Access");
-        console.log("✅ Protocol Statistics");
-        console.log("✅ Gas-Optimized Operations");
-        console.log("✅ Comprehensive Event Logging");
-        console.log("✅ Better Error Handling & Validation");
+        console.log("\n🚀 NEXT STEPS:");
+        console.log("1. Test stack-safe functions: npm run test:stack-safe");
+        console.log("2. Verify contracts: npm run verify:sepolia");
+        console.log("3. Test API integration: curl https://yieldx.onrender.com/health");
+        console.log("4. Submit to Chainlink Hackathon! 🏆");
         
-        console.log("\n🎯 Enhanced Testing Commands:");
-        console.log(`const core = await ethers.getContractAt("YieldXCore", "${coreAddress}");`);
-        console.log(`await core.getCommitteeMembers(); // Get all committee members`);
-        console.log(`await core.getProtocolStats(); // Get protocol statistics`);
-        console.log(`await core.getAllInvoices(); // Get all invoice IDs`);
-        console.log(`await core.getInvoicesByStatus(0); // Get submitted invoices`);
-        console.log(`await core.version(); // Get contract version`);
-        
-        console.log("\n📱 Frontend Integration Updates:");
-        console.log("Your frontend will now support:");
-        console.log("• Real committee member lists");
-        console.log("• Enhanced invoice data");
-        console.log("• Protocol statistics");
-        console.log("• Better error handling");
-        
-        console.log("\n🔥 Your Enhanced YieldX Protocol is ready!");
-        console.log("🌟 All committee management features are now blockchain-native!");
-        
+        console.log("\n🔗 USEFUL LINKS:");
+        console.log(`📊 YieldXCore: https://sepolia.etherscan.io/address/${deployedContracts.yieldXCore}`);
+        console.log(`🎨 NFT Contract: https://sepolia.etherscan.io/address/${deployedContracts.invoiceNFT}`);
+        console.log(`💰 USDC: https://sepolia.etherscan.io/address/${deployedContracts.mockUSDC}`);
+        console.log(`🌐 Live API: https://yieldx.onrender.com`);
+
+        return deploymentResult;
+
     } catch (error) {
-        console.error("❌ Enhanced deployment failed:", error);
+        console.error("\n❌ DEPLOYMENT FAILED:", error);
+        console.log("\n🔧 Troubleshooting Tips:");
+        console.log("1. Run size check first: npm run size:check");
+        console.log("2. Ensure contracts compile: npm run compile");
+        console.log("3. Check constructor parameters match");
+        console.log("4. Verify sufficient ETH balance");
+        console.log("5. Check network configuration");
+        
         throw error;
     }
 }
 
-main()
-    .then(() => process.exit(0))
-    .catch((error) => {
-        console.error(error);
-        process.exit(1);
-    });
+// Execute deployment
+if (require.main === module) {
+    main()
+        .then((result) => {
+            console.log("\n✅ Stack-safe deployment completed successfully!");
+            console.log(`📦 Architecture: ${result.architecture}`);
+            console.log(`🏗️ Contracts: ${Object.keys(result.contracts).length}`);
+            process.exit(0);
+        })
+        .catch((error) => {
+            console.error("\n❌ Deployment failed:", error);
+            process.exit(1);
+        });
+}
+
+export default main;

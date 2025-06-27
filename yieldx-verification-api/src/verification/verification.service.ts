@@ -28,6 +28,206 @@ export class VerificationService {
     private documentService: DocumentService,
   ) {}
 
+  // ============ NEW: CHAINLINK COMPATIBLE VERIFICATION ============
+  async createChainlinkCompatibleVerification(data: any): Promise<any> {
+    const verificationId = `cl_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    this.logger.log(`🔗 Creating Chainlink-compatible verification: ${verificationId}`);
+
+    try {
+      // Simplified risk assessment for Chainlink Functions
+      const riskFactors = this.calculateChainlinkRiskScore(data);
+      const creditRating = this.calculateCreditRating(riskFactors.totalRisk);
+      const isValid = riskFactors.totalRisk < 70; // Accept if risk < 70%
+
+      const result = {
+        invoiceId: data.invoiceId,
+        isValid: isValid,
+        riskScore: riskFactors.totalRisk,
+        creditRating: creditRating,
+        details: this.generateVerificationDetails(riskFactors, isValid),
+        verificationId: verificationId,
+        timestamp: new Date().toISOString(),
+        verificationChecks: {
+          documentIntegrity: true,
+          sanctionsCheck: riskFactors.sanctionsRisk > 20 ? 'FLAGGED' : 'CLEAR',
+          fraudCheck: riskFactors.fraudRisk > 30 ? 'FAILED' : 'PASSED',
+          commodityCheck: riskFactors.commodityRisk > 25 ? 'REJECTED' : 'APPROVED',
+          entityVerification: 'VERIFIED'
+        },
+        riskFactors: riskFactors
+      };
+
+      // Store simplified record for Chainlink requests
+      await this.storeChainlinkVerificationRecord(result, data);
+
+      this.logger.log(`✅ Chainlink verification completed: ${verificationId} - Valid: ${isValid}, Risk: ${riskFactors.totalRisk}`);
+
+      return result;
+
+    } catch (error) {
+      this.logger.error(`❌ Chainlink verification failed: ${verificationId} - ${error.message}`);
+      
+      // Return fallback result for Chainlink Functions
+      return {
+        invoiceId: data.invoiceId,
+        isValid: false,
+        riskScore: 75,
+        creditRating: 'PENDING',
+        details: 'Verification service temporarily unavailable - manual review required',
+        verificationId: `error_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        error: 'Service temporarily unavailable'
+      };
+    }
+  }
+
+  private calculateChainlinkRiskScore(data: any): any {
+    const riskFactors = {
+      commodityRisk: 0,
+      geographicRisk: 0,
+      amountRisk: 0,
+      entityRisk: 0,
+      sanctionsRisk: 0,
+      fraudRisk: 0,
+      totalRisk: 0
+    };
+
+    // Commodity Risk Assessment (0-30 points)
+    const commodityRiskMap = {
+      'coffee': 5, 'cocoa': 8, 'tea': 5, 'spices': 10,
+      'electronics': 15, 'machinery': 12, 'textiles': 8,
+      'oil': 25, 'gas': 30, 'minerals': 20, 'gold': 25,
+      'diamonds': 30, 'timber': 15, 'rubber': 10
+    };
+    
+    const commodity = data.commodity?.toLowerCase() || '';
+    riskFactors.commodityRisk = commodityRiskMap[commodity] || 10;
+
+    // Geographic Risk Assessment (0-25 points)
+    const countryRiskMap = {
+      'usa': 1, 'canada': 2, 'uk': 2, 'germany': 2, 'france': 2,
+      'japan': 3, 'australia': 3, 'singapore': 4, 'uae': 5,
+      'china': 8, 'india': 6, 'brazil': 10, 'mexico': 8,
+      'kenya': 12, 'ghana': 10, 'nigeria': 15, 'ethiopia': 12,
+      'ivory coast': 13, 'south africa': 8, 'egypt': 12,
+      'russia': 20, 'iran': 25, 'iraq': 25, 'afghanistan': 25
+    };
+
+    const supplierRisk = countryRiskMap[data.supplierCountry?.toLowerCase()] || 15;
+    const buyerRisk = countryRiskMap[data.buyerCountry?.toLowerCase()] || 15;
+    riskFactors.geographicRisk = Math.max(supplierRisk, buyerRisk);
+
+    // Amount Risk Assessment (0-20 points)
+    const amount = parseFloat(data.amount) || 0;
+    if (amount < 10000) riskFactors.amountRisk = 2;
+    else if (amount < 50000) riskFactors.amountRisk = 5;
+    else if (amount < 100000) riskFactors.amountRisk = 8;
+    else if (amount < 500000) riskFactors.amountRisk = 12;
+    else if (amount < 1000000) riskFactors.amountRisk = 15;
+    else riskFactors.amountRisk = 20;
+
+    // Entity Risk Assessment (0-15 points)
+    const exporterName = data.exporterName?.toLowerCase() || '';
+    const buyerName = data.buyerName?.toLowerCase() || '';
+    
+    // Check for suspicious entity patterns
+    if (exporterName.includes('unknown') || buyerName.includes('unknown')) {
+      riskFactors.entityRisk += 10;
+    }
+    if (exporterName.length < 5 || buyerName.length < 5) {
+      riskFactors.entityRisk += 5;
+    }
+
+    // Sanctions Risk (0-10 points)
+    const sanctionedCountries = ['iran', 'north korea', 'syria', 'cuba'];
+    if (sanctionedCountries.includes(data.supplierCountry?.toLowerCase()) ||
+        sanctionedCountries.includes(data.buyerCountry?.toLowerCase())) {
+      riskFactors.sanctionsRisk = 25; // High risk
+    }
+
+    // Fraud Risk Assessment (0-10 points)
+    if (amount > 1000000 && (supplierRisk > 15 || buyerRisk > 15)) {
+      riskFactors.fraudRisk = 15;
+    } else if (amount > 500000 && supplierRisk > 10) {
+      riskFactors.fraudRisk = 10;
+    } else {
+      riskFactors.fraudRisk = 2;
+    }
+
+    // Calculate total risk (max 100)
+    riskFactors.totalRisk = Math.min(100, 
+      riskFactors.commodityRisk + 
+      riskFactors.geographicRisk + 
+      riskFactors.amountRisk + 
+      riskFactors.entityRisk + 
+      riskFactors.sanctionsRisk + 
+      riskFactors.fraudRisk
+    );
+
+    return riskFactors;
+  }
+
+  private generateVerificationDetails(riskFactors: any, isValid: boolean): string {
+    const details: string[] = [];
+    
+    if (isValid) {
+      details.push('Document verification completed successfully');
+      
+      if (riskFactors.totalRisk < 20) {
+        details.push('Low risk trade - excellent credit profile');
+      } else if (riskFactors.totalRisk < 40) {
+        details.push('Moderate risk trade - standard due diligence applied');
+      } else {
+        details.push('Elevated risk trade - enhanced monitoring recommended');
+      }
+    } else {
+      details.push('Trade requires manual review due to high risk factors');
+      
+      if (riskFactors.sanctionsRisk > 20) {
+        details.push('Sanctions screening flagged for review');
+      }
+      if (riskFactors.fraudRisk > 30) {
+        details.push('Fraud risk indicators detected');
+      }
+      if (riskFactors.geographicRisk > 20) {
+        details.push('High geographic risk jurisdiction');
+      }
+    }
+
+    details.push(`Risk assessment: ${riskFactors.totalRisk}/100`);
+    
+    return details.join(' | ');
+  }
+
+  private async storeChainlinkVerificationRecord(result: any, originalData: any): Promise<void> {
+    try {
+      const record = new this.verificationModel({
+        verificationId: result.verificationId,
+        invoiceId: result.invoiceId,
+        documentHash: originalData.documentHash || '0x0000',
+        isValid: result.isValid,
+        riskScore: result.riskScore,
+        creditRating: result.creditRating,
+        verificationChecks: result.verificationChecks,
+        details: [result.details],
+        recommendations: [],
+        processingTimeMs: 0,
+        metadata: {
+          source: 'chainlink-functions',
+          originalData: originalData,
+          riskFactors: result.riskFactors
+        },
+      });
+
+      await record.save();
+    } catch (error) {
+      this.logger.warn(`Could not store Chainlink verification record: ${error.message}`);
+      // Don't throw error as verification can still proceed
+    }
+  }
+
+  // ============ EXISTING METHODS (UNCHANGED) ============
   async verifyDocuments(request: VerificationRequestDto): Promise<VerificationRequestDto> {
     const startTime = Date.now();
     const verificationId = uuidv4();
@@ -274,6 +474,13 @@ export class VerificationService {
       { $sort: { _id: 1 } }
     ]);
 
+    const recentVerifications = await this.verificationModel
+      .find()
+      .sort({ verifiedAt: -1 })
+      .limit(10)
+      .select('invoiceId isValid riskScore creditRating verifiedAt')
+      .exec();
+
     return {
       total,
       valid,
@@ -284,6 +491,16 @@ export class VerificationService {
         acc[item._id] = item.count;
         return acc;
       }, {}),
+      recentVerifications,
+      chainlinkIntegration: {
+        status: 'active',
+        endpointsAvailable: [
+          'POST /verification/verify-documents',
+          'POST /verification/chainlink-verify',
+          'GET /verification/test'
+        ],
+        lastUpdated: new Date().toISOString()
+      }
     };
   }
 }

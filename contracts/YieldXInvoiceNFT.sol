@@ -64,6 +64,13 @@ contract YieldXInvoiceNFT {
     
     constructor() {}
     
+    // UPDATED: Added setProtocolAddress function for YieldXCore compatibility
+    function setProtocolAddress(address _protocol) external {
+        require(protocol == address(0), "Protocol already set");
+        protocol = _protocol;
+    }
+    
+    // Keep the old function for backward compatibility
     function setProtocol(address _protocol) external {
         require(protocol == address(0), "Protocol already set");
         protocol = _protocol;
@@ -121,7 +128,7 @@ contract YieldXInvoiceNFT {
     }
     
     /**
-     * @notice Mint a new invoice NFT with document hash
+     * @notice Mint a new invoice NFT with document hash - Original function
      */
     function mintInvoiceNFT(
         address to,
@@ -156,6 +163,55 @@ contract YieldXInvoiceNFT {
             lastUpdated: block.timestamp,
             isUploaded: false
         });
+        
+        emit Transfer(address(0), to, tokenId);
+        emit InvoiceNFTMinted(tokenId, to, _commodity, _amount);
+        return tokenId;
+    }
+    
+    // ADDED: Additional mint function that matches the YieldXCore contract call signature
+    function mintToSupplier(
+        address to,
+        uint256 invoiceId,
+        string memory _commodity,
+        uint256 _amount,
+        string memory _exporterName,
+        string memory _buyerName,
+        string memory _destination,
+        uint256 _dueDate,
+        uint8 _status,
+        uint256 _createdAt,
+        uint256 _riskScore,
+        uint256 _finalAPR
+    ) external onlyProtocol returns (uint256) {
+        uint256 tokenId = invoiceId; // Use invoiceId as tokenId for consistency
+        
+        // Store core data
+        tokenOwner[tokenId] = to;
+        commodity[tokenId] = _commodity;
+        amount[tokenId] = _amount;
+        exporterName[tokenId] = _exporterName;
+        buyerName[tokenId] = _buyerName;
+        destination[tokenId] = _destination;
+        dueDate[tokenId] = _dueDate;
+        status[tokenId] = _status;
+        createdAt[tokenId] = _createdAt;
+        riskScore[tokenId] = _riskScore;
+        finalAPR[tokenId] = _finalAPR;
+        
+        // Initialize IPFS data
+        ipfsData[tokenId] = IPFSMetadata({
+            imageHash: "",
+            metadataHash: "",
+            documentHash: "",
+            lastUpdated: block.timestamp,
+            isUploaded: false
+        });
+        
+        // Update counter if needed
+        if (tokenId >= _tokenIdCounter) {
+            _tokenIdCounter = tokenId + 1;
+        }
         
         emit Transfer(address(0), to, tokenId);
         emit InvoiceNFTMinted(tokenId, to, _commodity, _amount);
@@ -248,8 +304,63 @@ contract YieldXInvoiceNFT {
         emit ApprovalForAll(msg.sender, operator, approved);
     }
     
+    // ADDED: Enhanced view functions to match YieldXCore expectations
+    
     /**
-     * @notice Get basic invoice information
+     * @notice Get basic invoice information - Split to avoid stack too deep
+     */
+    function getInvoiceBasicData(uint256 tokenId) external view returns (
+        string memory commodityType,
+        uint256 invoiceAmount,
+        string memory exporter,
+        string memory buyer
+    ) {
+        require(tokenOwner[tokenId] != address(0), "Token does not exist");
+        
+        return (
+            commodity[tokenId],
+            amount[tokenId],
+            exporterName[tokenId],
+            buyerName[tokenId]
+        );
+    }
+    
+    /**
+     * @notice Get invoice timing and status data
+     */
+    function getInvoiceStatusData(uint256 tokenId) external view returns (
+        string memory dest,
+        uint256 due,
+        uint8 currentStatus,
+        uint256 created
+    ) {
+        require(tokenOwner[tokenId] != address(0), "Token does not exist");
+        
+        return (
+            destination[tokenId],
+            dueDate[tokenId],
+            status[tokenId],
+            createdAt[tokenId]
+        );
+    }
+    
+    /**
+     * @notice Get invoice risk and financial data
+     */
+    function getInvoiceRiskData(uint256 tokenId) external view returns (
+        uint256 risk,
+        uint256 apr
+    ) {
+        require(tokenOwner[tokenId] != address(0), "Token does not exist");
+        
+        return (
+            riskScore[tokenId],
+            finalAPR[tokenId]
+        );
+    }
+    
+    /**
+     * @notice Get basic invoice information - Original function (KEPT FOR COMPATIBILITY)
      */
     function getInvoiceData(uint256 tokenId) external view returns (
         string memory commodityType,
