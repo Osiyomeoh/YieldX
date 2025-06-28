@@ -50,6 +50,7 @@ export interface SubmitInvoiceForm {
   buyerName: string;
   destination: string;
   description: string;
+  originCountry: string;
 }
 
 export interface ContractAddresses {
@@ -68,6 +69,8 @@ export interface TransactionResult {
   success: boolean;
   error?: string;
   invoiceId?: string;
+  responseLength?: number;
+  requestId?: string;
 }
 
 export interface ProtocolStats {

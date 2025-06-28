@@ -1,0 +1,17 @@
+{
+    "language": "Solidity",
+    "sources": {},
+    "settings": {
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "*": ["*"]
+        }
+      },
+      "viaIR": true,
+      "evmVersion": "london"
+    }
+  }

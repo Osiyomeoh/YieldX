@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { FileText, Upload, MapPin, DollarSign, Building, Ship, Hash, AlertCircle, CheckCircle, ExternalLink, Loader2, Zap, Shield, RefreshCw, Cloud, CloudUpload, XCircle } from 'lucide-react';
 import { useYieldX } from '../../hooks/useYieldX';
 import { pinataService } from '../../services/pinataService';
-import IPFSTestComponent from '../IPFSTestComponent';
 
 // Required trade documents for compliance
 const TRADE_DOCUMENTS = [
@@ -46,11 +45,12 @@ export function SubmitInvoice() {
     txHash,
     isTransactionSuccess,
     contracts,
-    writeError,
     stats,
-    isCommitteeMember,
-    committeeRole,
-    refreshBalance
+    refreshBalance,
+    // Chainlink Functions integration
+    getFunctionsConfig,
+    startDocumentVerification,
+    getVerificationData,
   } = useYieldX();
 
   const [formData, setFormData] = useState<SubmitInvoiceForm>({
@@ -70,7 +70,6 @@ export function SubmitInvoice() {
     TRADE_DOCUMENTS.map(doc => ({ id: doc.id, file: null, status: 'pending' as const }))
   );
   const [showDocuments, setShowDocuments] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
   
   // IPFS Integration State
   const [ipfsConnected, setIpfsConnected] = useState<boolean>(false);
@@ -82,7 +81,6 @@ export function SubmitInvoice() {
   const [approvalTxHash, setApprovalTxHash] = useState<string>('');
   const [submissionTxHash, setSubmissionTxHash] = useState<string>('');
   const [showApprovalDetails, setShowApprovalDetails] = useState<boolean>(false);
-  const [transactionLog, setTransactionLog] = useState<string[]>([]);
 
   // Test IPFS connection on mount
   useEffect(() => {
@@ -90,9 +88,8 @@ export function SubmitInvoice() {
       try {
         const connected = await pinataService.testConnection();
         setIpfsConnected(connected);
-        console.log('🌐 IPFS Connection:', connected ? 'Connected' : 'Failed');
       } catch (error) {
-        console.error('❌ IPFS Connection Error:', error);
+        console.error('IPFS Connection Error:', error);
         setIpfsConnected(false);
       }
     };
@@ -102,17 +99,9 @@ export function SubmitInvoice() {
   // Refresh balance after transaction success
   useEffect(() => {
     if (isTransactionSuccess && txHash) {
-      console.log('🎉 Transaction confirmed, refreshing balance...');
       refreshBalance();
     }
   }, [isTransactionSuccess, txHash, refreshBalance]);
-
-  // Helper function to add transaction log entries
-  const addLogEntry = (message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') => {
-    const timestamp = new Date().toLocaleTimeString();
-    const emoji = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
-    setTransactionLog(prev => [...prev, `${timestamp}: ${emoji} ${message}`]);
-  };
 
   // Calculate document completion
   const requiredDocs = TRADE_DOCUMENTS.filter(doc => doc.required);
@@ -145,8 +134,8 @@ export function SubmitInvoice() {
 
     // Check USDC balance
     const amount = parseFloat(formData.amount);
-    if (amount > usdcBalance) {
-      newErrors.amount = `Insufficient USDC balance. You have ${usdcBalance.toFixed(2)} USDC`;
+    if (amount > (usdcBalance || 0)) {
+      newErrors.amount = `Insufficient USDC balance. You have ${(usdcBalance || 0).toFixed(2)} USDC`;
     }
 
     setErrors(newErrors);
@@ -164,7 +153,7 @@ export function SubmitInvoice() {
   // Upload document to IPFS with progress handling
   const uploadDocumentToIPFS = useCallback(async (docId: string, file: File): Promise<void> => {
     if (!ipfsConnected) {
-      console.warn('⚠️ IPFS not connected, skipping upload');
+      console.warn('IPFS not connected, skipping upload');
       return;
     }
 
@@ -172,7 +161,7 @@ export function SubmitInvoice() {
     if (docIndex === -1) return;
 
     try {
-      // Update status to uploading with initial progress
+      // Update status to uploading
       setDocuments(prev => prev.map((doc, index) => 
         index === docIndex ? { 
           ...doc, 
@@ -181,8 +170,6 @@ export function SubmitInvoice() {
           error: undefined 
         } : doc
       ));
-
-      addLogEntry(`📤 Starting upload: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
 
       // Start progress simulation
       const progressInterval = setInterval(() => {
@@ -228,14 +215,10 @@ export function SubmitInvoice() {
         } : doc
       ));
 
-      addLogEntry(`✅ Upload complete: ${file.name} → ${result.IpfsHash.substring(0, 8)}...`, 'success');
-      console.log(`✅ Document uploaded to IPFS: ${result.IpfsHash}`);
-
     } catch (error) {
-      console.error('❌ IPFS upload failed:', error);
+      console.error('IPFS upload failed:', error);
       
       const errorMsg = error instanceof Error ? error.message : 'Upload failed';
-      addLogEntry(`❌ Upload failed: ${file.name} - ${errorMsg}`, 'error');
       
       setDocuments(prev => prev.map((doc, index) => 
         index === docIndex ? {
@@ -257,13 +240,13 @@ export function SubmitInvoice() {
     // Validate file
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
-      addLogEntry(`❌ File too large: ${file.name} (max 10MB)`, 'error');
+      alert(`File too large: ${file.name} (max 10MB)`);
       return;
     }
 
     const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
     if (!allowedTypes.includes(file.type)) {
-      addLogEntry(`❌ Invalid file type: ${file.type} (PDF, JPG, PNG only)`, 'error');
+      alert(`Invalid file type: ${file.type} (PDF, JPG, PNG only)`);
       return;
     }
 
@@ -286,7 +269,6 @@ export function SubmitInvoice() {
       setDocuments(prev => prev.map((doc, index) => 
         index === docIndex ? { ...doc, status: 'uploaded' } : doc
       ));
-      addLogEntry(`📁 Stored locally: ${file.name} (IPFS offline)`, 'warning');
     }
 
     // Clear document error
@@ -299,13 +281,11 @@ export function SubmitInvoice() {
   const retryUpload = useCallback(async (docId: string) => {
     const doc = documents.find(d => d.id === docId);
     if (!doc?.file) return;
-
-    addLogEntry(`🔄 Retrying upload: ${doc.file.name}`);
     
     try {
       await uploadDocumentToIPFS(docId, doc.file);
     } catch (error) {
-      addLogEntry(`❌ Retry failed: ${doc.file.name}`, 'error');
+      console.error('Retry failed:', error);
     }
   }, [documents, uploadDocumentToIPFS]);
 
@@ -331,8 +311,7 @@ export function SubmitInvoice() {
         { trait_type: "Destination", value: formData.destination },
         { trait_type: "Exporter", value: formData.exporterName },
         { trait_type: "Buyer", value: formData.buyerName },
-        { trait_type: "Document Count", value: documentHashes.length.toString() },
-        { trait_type: "IPFS Documents", value: documentHashes.length > 0 ? "Yes" : "No" }
+        { trait_type: "Document Count", value: documentHashes.length.toString() }
       ],
       properties: {
         invoiceData: {
@@ -360,8 +339,6 @@ export function SubmitInvoice() {
     };
 
     try {
-      console.log('📄 Uploading metadata to IPFS...');
-      
       const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], {
         type: 'application/json'
       });
@@ -383,10 +360,9 @@ export function SubmitInvoice() {
       
       const uri = `ipfs://${result.IpfsHash}`;
       setMetadataURI(uri);
-      console.log(`✅ Metadata uploaded to IPFS: ${uri}`);
       return uri;
     } catch (error) {
-      console.error('❌ Metadata upload failed:', error);
+      console.error('Metadata upload failed:', error);
       throw new Error('Failed to upload metadata to IPFS');
     }
   };
@@ -411,40 +387,28 @@ export function SubmitInvoice() {
     setApprovalStep('none');
     setApprovalTxHash('');
     setSubmissionTxHash('');
-    setTransactionLog([]);
 
     try {
-      addLogEntry('🚀 Starting invoice submission process...');
-      addLogEntry(`📁 Invoice: ${formData.commodity} - ${formData.amount} USD`);
-      addLogEntry(`🏢 From ${formData.exporterName} to ${formData.buyerName}`);
-
       let finalMetadataURI = '';
 
       // Upload metadata to IPFS if connected
       if (ipfsConnected) {
         try {
-          addLogEntry('📤 Uploading metadata to IPFS...');
           finalMetadataURI = await createAndUploadMetadata();
-          addLogEntry(`✅ Metadata uploaded: ${finalMetadataURI.substring(0, 20)}...`, 'success');
         } catch (ipfsError) {
-          addLogEntry('⚠️ IPFS metadata upload failed, continuing without metadata URI', 'warning');
-          console.error('⚠️ IPFS metadata upload failed:', ipfsError);
+          console.error('IPFS metadata upload failed:', ipfsError);
         }
-      } else {
-        addLogEntry('⚠️ IPFS not connected, submitting without metadata URI', 'warning');
       }
 
       setUploadingToIPFS(false);
 
       // Step 1: Approve USDC spending
       setApprovalStep('approving');
-      addLogEntry(`🔐 Step 1: Approving USDC spending for ${formData.amount} USDC...`);
       
       const approvalResult = await approveUSDC(contracts.PROTOCOL, formData.amount);
       
       if (!approvalResult?.success) {
         const errorMsg = approvalResult?.error || 'USDC approval failed';
-        addLogEntry(`❌ Approval failed: ${errorMsg}`, 'error');
         setSubmitResult({ success: false, error: errorMsg });
         setApprovalStep('none');
         setIsSubmitting(false);
@@ -452,33 +416,24 @@ export function SubmitInvoice() {
       }
 
       setApprovalTxHash(approvalResult.hash || '');
-      addLogEntry(`✅ USDC approval successful! TX: ${approvalResult.hash}`, 'success');
       setApprovalStep('approved');
 
       // Step 2: Wait for approval confirmation
-      addLogEntry('⏳ Waiting for approval confirmation...');
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Step 3: Submit the invoice
       setApprovalStep('submitting');
-      addLogEntry('📝 Step 2: Submitting invoice to smart contract...');
 
       const submissionData = {
         ...formData,
         metadataURI: finalMetadataURI,
-        buyer: address // Use connected address as buyer if not specified
+        buyer: address // Use connected address as buyer
       };
 
-      console.log('📝 Submitting to smart contract:', submissionData);
-      
       const result = await submitInvoice(submissionData);
-      
-      console.log('📄 Contract submission result:', result);
       
       if (result?.success) {
         setSubmissionTxHash(result.hash || '');
-        addLogEntry(`✅ Invoice submitted successfully! TX: ${result.hash}`, 'success');
-        addLogEntry(`🎉 Invoice "${formData.commodity}" is now on the blockchain!`, 'success');
         
         setSubmitResult({
           success: true,
@@ -501,10 +456,8 @@ export function SubmitInvoice() {
         setApprovalStep('none');
       } else {
         const errorMsg = result?.error || 'Transaction failed';
-        addLogEntry(`❌ Invoice submission failed: ${errorMsg}`, 'error');
         
         if (errorMsg.includes('Insufficient allowance')) {
-          addLogEntry('💡 Try increasing the approval amount or wait longer for confirmation', 'warning');
           setShowApprovalDetails(true);
         }
         
@@ -514,7 +467,7 @@ export function SubmitInvoice() {
         });
       }
     } catch (error) {
-      console.error('❌ Submit error:', error);
+      console.error('Submit error:', error);
       let errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
       
       if (errorMsg.includes('Insufficient allowance')) {
@@ -526,7 +479,6 @@ export function SubmitInvoice() {
         errorMsg = 'Transaction was cancelled by user.';
       }
       
-      addLogEntry(`❌ Submission error: ${errorMsg}`, 'error');
       setSubmitResult({
         success: false,
         error: errorMsg
@@ -584,7 +536,7 @@ export function SubmitInvoice() {
                   <div className="space-y-1">
                     <div className="flex items-center justify-center space-x-2 text-blue-600">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Uploading to IPFS... {doc.progress?.toFixed(0) || 0}%</span>
+                      <span>Uploading... {doc.progress?.toFixed(0) || 0}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div 
@@ -649,9 +601,7 @@ export function SubmitInvoice() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
-      {showDebug && <IPFSTestComponent />}
-      
+    <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="text-center mb-12">
         <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-6">
@@ -665,18 +615,11 @@ export function SubmitInvoice() {
           Access decentralized finance through YieldX smart contracts.
         </p>
         
-        <div className="mt-6 flex justify-center gap-4">
-          <div className={`flex items-center space-x-2 px-4 py-2 rounded-full text-sm ${
-            ipfsConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-          }`}>
-            <Cloud className={`w-4 h-4 ${ipfsConnected ? 'text-green-600' : 'text-yellow-600'}`} />
-            <span>IPFS {ipfsConnected ? 'Connected' : 'Offline'}</span>
-          </div>
-          
+        <div className="mt-6 flex justify-center gap-4 flex-wrap">
           {isConnected && (
             <div className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm">
               <DollarSign className="w-4 h-4 text-blue-600" />
-              <span>{usdcBalance.toFixed(2)} USDC Available</span>
+              <span>{(usdcBalance || 0).toFixed(2)} USDC Available</span>
             </div>
           )}
         </div>
@@ -686,53 +629,6 @@ export function SubmitInvoice() {
             <p className="text-yellow-800 font-medium">
               ⚠️ Please connect your wallet to submit an invoice
             </p>
-          </div>
-        )}
-      </div>
-
-      {/* Protocol Status */}
-      <div className="mb-8 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">📊 Protocol Status</h3>
-          <button
-            onClick={() => setShowDebug(!showDebug)}
-            className="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
-          >
-            {showDebug ? 'Hide' : 'Show'} Debug
-          </button>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600">{stats?.totalInvoices || 0}</div>
-            <div className="text-sm text-gray-600">Total Invoices</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">{stats?.approvedInvoices || 0}</div>
-            <div className="text-sm text-gray-600">Approved</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-purple-600">${(stats?.totalFundsRaised || 0).toFixed(0)}</div>
-            <div className="text-sm text-gray-600">Funds Raised</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-orange-600">{stats?.activeVaults || 0}</div>
-            <div className="text-sm text-gray-600">Active Investments</div>
-          </div>
-        </div>
-
-        {showDebug && (
-          <div className="mt-4 p-4 bg-gray-900 text-green-400 rounded font-mono text-sm">
-            <div>Connected: {isConnected ? '✅' : '❌'}</div>
-            <div>Chain: {chain?.name} ({chain?.id})</div>
-            <div>Address: {address?.slice(0, 10)}...{address?.slice(-6)}</div>
-            <div>USDC Balance: {usdcBalance.toFixed(2)}</div>
-            <div>Protocol: {contracts?.PROTOCOL}</div>
-            <div>IPFS: {ipfsConnected ? '✅ Connected' : '❌ Offline'}</div>
-            <div>Metadata URI: {metadataURI || 'None'}</div>
-            <div>Documents on IPFS: {documents.filter(d => d.ipfsHash).length}</div>
-            <div>Approval Step: {approvalStep}</div>
-            {writeError && <div className="text-red-400">Error: {writeError.message}</div>}
           </div>
         )}
       </div>
@@ -755,6 +651,7 @@ export function SubmitInvoice() {
               )}
               <span>Step 1: Approve USDC spending</span>
             </div>
+            
             <div className={`flex items-center gap-2 text-sm ${
               approvalStep === 'submitting' ? 'text-blue-700' : 'text-gray-500'
             }`}>
@@ -791,34 +688,6 @@ export function SubmitInvoice() {
               )}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Approval Details */}
-      {showApprovalDetails && (
-        <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-            <div>
-              <h4 className="font-medium text-yellow-900 mb-2">USDC Approval Required</h4>
-              <p className="text-sm text-yellow-800 mb-3">
-                To submit an invoice, you need to approve the YieldX protocol to spend your USDC tokens. 
-                This allows the contract to handle fees or deposits.
-              </p>
-              <div className="text-xs text-yellow-700 space-y-1">
-                <p>• Step 1: Approve USDC spending (transaction fee required)</p>
-                <p>• Step 2: Submit the invoice (additional transaction fee)</p>
-                <p>• Your USDC remains in your wallet until needed</p>
-                <p>• Current balance: {usdcBalance.toFixed(2)} USDC</p>
-              </div>
-              <button
-                onClick={() => setShowApprovalDetails(false)}
-                className="mt-3 text-xs text-yellow-600 underline hover:text-yellow-800"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -873,16 +742,30 @@ export function SubmitInvoice() {
         </div>
       )}
 
-      {/* Transaction Log */}
-      {transactionLog.length > 0 && (
-        <div className="mb-8 bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm max-h-40 overflow-y-auto">
-          <p className="text-white mb-2 flex items-center gap-2">
-            <RefreshCw className="w-4 h-4" />
-            Transaction Log:
-          </p>
-          {transactionLog.slice(-8).map((entry, index) => (
-            <p key={index} className="text-xs mb-1">{entry}</p>
-          ))}
+      {/* Approval Details */}
+      {showApprovalDetails && (
+        <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-yellow-900 mb-2">USDC Approval Required</h4>
+              <p className="text-sm text-yellow-800 mb-3">
+                To submit an invoice, you need to approve the YieldX protocol to spend your USDC tokens.
+              </p>
+              <div className="text-xs text-yellow-700 space-y-1">
+                <p>• Step 1: Approve USDC spending (transaction fee required)</p>
+                <p>• Step 2: Submit the invoice (additional transaction fee)</p>
+                <p>• Your USDC remains in your wallet until needed</p>
+                <p>• Current balance: {(usdcBalance || 0).toFixed(2)} USDC</p>
+              </div>
+              <button
+                onClick={() => setShowApprovalDetails(false)}
+                className="mt-3 text-xs text-yellow-600 underline hover:text-yellow-800"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -898,33 +781,6 @@ export function SubmitInvoice() {
               </div>
             </div>
             <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-          </div>
-        </div>
-      )}
-
-      {/* Real-time Transaction Status */}
-      {txHash && (
-        <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Loader2 className="w-5 h-5 animate-spin text-blue-600 mr-3" />
-              <div>
-                <p className="font-medium text-blue-900">
-                  {isTransactionSuccess ? '✅ Transaction Confirmed!' : 'Transaction Processing...'}
-                </p>
-                <p className="text-sm text-blue-700">
-                  {isTransactionSuccess ? 'Invoice submitted successfully!' : 'Waiting for blockchain confirmation...'}
-                </p>
-              </div>
-            </div>
-            <a
-              href={`https://sepolia.etherscan.io/tx/${txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800"
-            >
-              <ExternalLink className="w-5 h-5" />
-            </a>
           </div>
         </div>
       )}
@@ -1011,8 +867,8 @@ export function SubmitInvoice() {
             </div>
             {errors.amount && <p className="text-red-500 text-sm mt-1">{errors.amount}</p>}
             <div className="mt-2 text-sm text-gray-600">
-              Available USDC: {usdcBalance.toFixed(2)} • 
-              {parseFloat(formData.amount || '0') > usdcBalance && (
+              Available USDC: {(usdcBalance || 0).toFixed(2)} • 
+              {parseFloat(formData.amount || '0') > (usdcBalance || 0) && (
                 <span className="text-red-600 font-medium"> Insufficient balance!</span>
               )}
             </div>
@@ -1167,7 +1023,7 @@ export function SubmitInvoice() {
                   <p>• Submit invoice to YieldX protocol</p>
                   <p>• {ipfsConnected ? 'Documents stored on IPFS' : 'Documents stored locally'}</p>
                   <p>• Smart contract verification</p>
-                  <p>• Committee review and VRF processing</p>
+                  <p>• Committee review and processing</p>
                   {ipfsConnected && <p className="text-green-700">• ✅ IPFS ensures permanent storage</p>}
                 </div>
               </div>
@@ -1188,7 +1044,7 @@ export function SubmitInvoice() {
                 </div>
               )}
               <div className="mt-1 text-blue-600">
-                💰 Balance: {usdcBalance.toFixed(2)} USDC
+                💰 Balance: {(usdcBalance || 0).toFixed(2)} USDC
               </div>
             </div>
             <button
@@ -1199,11 +1055,11 @@ export function SubmitInvoice() {
                 !isConnected || 
                 documentProgress < 100 || 
                 uploadingToIPFS ||
-                parseFloat(formData.amount || '0') > usdcBalance ||
+                parseFloat(formData.amount || '0') > (usdcBalance || 0) ||
                 approvalStep !== 'none'
               }
               className={`px-8 py-4 rounded-xl font-semibold text-white transition-all ${
-                isSubmitting || loading || !isConnected || documentProgress < 100 || uploadingToIPFS || parseFloat(formData.amount || '0') > usdcBalance || approvalStep !== 'none'
+                isSubmitting || loading || !isConnected || documentProgress < 100 || uploadingToIPFS || parseFloat(formData.amount || '0') > (usdcBalance || 0) || approvalStep !== 'none'
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:scale-105'
               }`}
@@ -1233,7 +1089,7 @@ export function SubmitInvoice() {
                   <AlertCircle className="w-5 h-5" />
                   Connect Wallet First
                 </span>
-              ) : parseFloat(formData.amount || '0') > usdcBalance ? (
+              ) : parseFloat(formData.amount || '0') > (usdcBalance || 0) ? (
                 <span className="flex items-center gap-3">
                   <XCircle className="w-5 h-5" />
                   Insufficient USDC Balance
@@ -1246,7 +1102,8 @@ export function SubmitInvoice() {
               ) : (
                 <span className="flex items-center gap-3">
                   <FileText className="w-5 h-5" />
-                  Submit Invoice {ipfsConnected && '+ IPFS'}
+                  Submit Invoice
+                  {ipfsConnected && ' + IPFS'}
                 </span>
               )}
             </button>
@@ -1259,9 +1116,9 @@ export function SubmitInvoice() {
           <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
             <Shield className="w-6 h-6 text-green-600" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-2">Secure USDC Approval</h3>
+          <h3 className="font-semibold text-gray-900 mb-2">Secure Process</h3>
           <p className="text-sm text-gray-600">
-            Two-step process ensures your funds remain secure until needed.
+            Two-step approval process ensures your funds remain secure.
           </p>
         </div>
 
@@ -1269,11 +1126,11 @@ export function SubmitInvoice() {
           <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
             <Cloud className="w-6 h-6 text-purple-600" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-2">IPFS Document Storage</h3>
+          <h3 className="font-semibold text-gray-900 mb-2">IPFS Storage</h3>
           <p className="text-sm text-gray-600">
             {ipfsConnected 
-              ? 'Permanent, decentralized document storage on IPFS.'
-              : 'IPFS integration ready for permanent storage.'}
+              ? 'Documents stored permanently on IPFS.'
+              : 'IPFS integration ready for storage.'}
           </p>
         </div>
 
@@ -1281,12 +1138,14 @@ export function SubmitInvoice() {
           <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
             <DollarSign className="w-6 h-6 text-blue-600" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-2">Transparent Process</h3>
+          <h3 className="font-semibold text-gray-900 mb-2">Transparent</h3>
           <p className="text-sm text-gray-600">
-            Track every step from approval to blockchain confirmation.
+            Track every step from submission to blockchain confirmation.
           </p>
         </div>
       </div>
     </div>
   );
 }
+
+export default SubmitInvoice;

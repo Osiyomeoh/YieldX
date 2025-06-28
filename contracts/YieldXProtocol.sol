@@ -218,7 +218,7 @@ contract YieldXCore {
         Invoice storage invoice = invoices[invoiceId];
         
         // Get verification data to calculate final APR
-        (,,,, uint256 riskScore,,,) = verificationModule.getDocumentVerification(invoiceId);
+       (, , , uint256 riskScore, , ) = verificationModule.getDocumentVerification(invoiceId);
         
         // Calculate final APR through VRF module
         uint256 aprBasisPoints = vrfModule.calculateFinalAPR(

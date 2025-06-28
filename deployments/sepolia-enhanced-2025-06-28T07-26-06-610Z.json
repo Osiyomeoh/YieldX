@@ -1,0 +1,55 @@
+{
+  "network": "sepolia",
+  "deployer": "0xA6e8bf8E89Bd2c2BD37e308F275C4f52284a911F",
+  "timestamp": "2025-06-28T07:26:06.610Z",
+  "version": "YieldXCore v4.2.0 - Enhanced Modular with Official Chainlink",
+  "architecture": "modular",
+  "contracts": {
+    "mockUSDC": "0xe9842E2BF32d4AaD9e99E7749303943291aa5c85",
+    "invoiceNFT": "0x1aF3Ab370025145ab9d652db877557E6a295e831",
+    "priceManager": "0xEB3F22111598D8840cb6B654cAf1Ee71794a42C9",
+    "fallbackContract": "0x1350937c334e7d7F2923bB0BEba7dF2Af2390a05",
+    "riskCalculator": "0xEF32BdA0Ae61d8e89957e7B191FC88Bc7AEEdC0A",
+    "verificationModule": "0x63a32Fc79f3BDf6cD28352d877Cd7BC7185C8441",
+    "investmentModule": "0xFF614c9C304419837e0b0184ed4e3DDf4b895974",
+    "vrfModule": "0xB7EaDDDc8eC1D007422BFf103Ce45D1582C8482d",
+    "yieldXCore": "0x3DFB65231f762a9d7Ccab91225170f1C84b899fB"
+  },
+  "chainlinkConfig": {
+    "ETH_USD_FEED": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+    "BTC_USD_FEED": "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43",
+    "USDC_USD_FEED": "0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E",
+    "LINK_USD_FEED": "0xc59E3633BAAC79493d908e63626716e204A45EdF",
+    "VRF_COORDINATOR": "0x8103B0A8A00be2DDC778e6e7eaa21791Cd364625",
+    "VRF_KEY_HASH": "0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c",
+    "FUNCTIONS_ROUTER": "0xb83E47C2bC239B3bf370bc41e1459A34b41238D0"
+  },
+  "subscriptions": {
+    "vrfSubscriptionId": "35127266008152230287761209727211507096682063164260802445112431263919177634415",
+    "functionsSubscriptionId": 4996
+  },
+  "deploymentBlock": 8645869,
+  "enhancements": {
+    "verificationModule": "Official Chainlink Functions library with FunctionsClient inheritance",
+    "stackSafe": true,
+    "gasOptimized": true,
+    "productionReady": true,
+    "featuresEnabled": [
+      "Document Verification",
+      "Risk Assessment",
+      "Credit Rating",
+      "Sanctions Screening"
+    ]
+  },
+  "frontendConfig": {
+    "YieldXCore": "0x3DFB65231f762a9d7Ccab91225170f1C84b899fB",
+    "YieldXVerificationModule": "0x63a32Fc79f3BDf6cD28352d877Cd7BC7185C8441",
+    "MockUSDC": "0xe9842E2BF32d4AaD9e99E7749303943291aa5c85",
+    "YieldXInvoiceNFT": "0x1aF3Ab370025145ab9d652db877557E6a295e831",
+    "YieldXPriceManager": "0xEB3F22111598D8840cb6B654cAf1Ee71794a42C9",
+    "YieldXRiskCalculator": "0xEF32BdA0Ae61d8e89957e7B191FC88Bc7AEEdC0A",
+    "chainId": 11155111,
+    "apiUrl": "https://yieldx.onrender.com",
+    "explorerUrl": "https://sepolia.etherscan.io"
+  }
+}

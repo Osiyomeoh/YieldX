@@ -1,4 +1,4 @@
-// src/components/pages/Dashboard.tsx - Complete Updated Version
+// src/components/pages/Dashboard.tsx - Updated with Real Contract Data
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   TrendingUp, BarChart3, Globe, RefreshCw, ExternalLink, Loader2, 
@@ -102,13 +102,13 @@ const useAddressDisplay = (address: string | undefined) => {
 };
 
 // User investments hook (ready for future contract integration)
-const useUserInvestments = (address: string | undefined, getInvoiceDetails: any) => {
+const useUserInvestments = (address: string | undefined, getInvestmentOpportunities: any) => {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
     const fetchUserInvestments = async () => {
-      if (!address || !getInvoiceDetails) {
+      if (!address || !getInvestmentOpportunities) {
         setInvestments([]);
         setLoading(false);
         return;
@@ -116,7 +116,11 @@ const useUserInvestments = (address: string | undefined, getInvoiceDetails: any)
       
       setLoading(true);
       try {
-        // TODO: Implement getUserInvestments in your smart contract
+        // Get investment opportunities from your real contract
+        const opportunities = await getInvestmentOpportunities();
+        console.log('📊 Investment opportunities from contract:', opportunities);
+        
+        // TODO: Get user's actual investments once contract method is available
         const userInvestments: Investment[] = [];
         setInvestments(userInvestments);
       } catch (error) {
@@ -128,7 +132,7 @@ const useUserInvestments = (address: string | undefined, getInvoiceDetails: any)
     };
 
     fetchUserInvestments();
-  }, [address, getInvoiceDetails]);
+  }, [address, getInvestmentOpportunities]);
   
   const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
   const portfolioValue = investments.reduce((sum, inv) => sum + inv.currentValue, 0);
@@ -144,53 +148,75 @@ const useUserInvestments = (address: string | undefined, getInvoiceDetails: any)
 };
 
 export function Dashboard({ setActiveTab }: DashboardProps) {
-  // Updated to use latest useYieldX hook features
+  // Use your championship protocol hook with all the latest features
   const { 
     isConnected, 
     address, 
-    liveMarketData,        // Updated from marketData
-    usdcBalance,
+    liveMarketData,        // Live Chainlink oracle data
+    usdcBalance,           // Real USDC balance from contract
     refreshBalance,
-    stats,
+    stats,                 // Real protocol stats from contract
     loading,
     mintTestUSDC,
     txHash,
     isTransactionSuccess,
-    contracts,
-    isCommitteeMember,
-    isOwner,
-    committeeRole,         // Added committee role
+    contracts,             // Your live contract addresses
     writeError,
     getInvoiceDetails,
-    updateLivePrices,      // Added price update functions
-    forceUpdateLivePrices,
-    testPriceFeeds
+    getVerificationData,   // New: Get verification data from your proven module
+    getInvestmentInfo,
+    getInvestmentOpportunities,
+    getFunctionsConfig,    // New: Get Functions configuration
+    getLastFunctionsResponse, // New: Get latest Functions response
+    testDirectRequest,     // New: Test Functions integration
+    updateLivePrices,
   } = useYieldX();
 
   const { notifications, addNotification, removeNotification, clearAllNotifications } = useNotifications();
   const { displayAddress, showFull, setShowFull, copyAddress, copied } = useAddressDisplay(address);
-  const { investments, totalInvested, portfolioValue, totalReturns, loading: investmentsLoading } = useUserInvestments(address, getInvoiceDetails);
+  const { investments, totalInvested, portfolioValue, totalReturns, loading: investmentsLoading } = useUserInvestments(address, getInvestmentOpportunities);
   
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<number>(0);
+  const [functionsConfig, setFunctionsConfig] = useState<any>(null);
+  const [lastFunctionsResponse, setLastFunctionsResponse] = useState<any>(null);
 
-  // Computed values using updated data structure
+  // Load Functions data from your proven working verification module
+  useEffect(() => {
+    const loadFunctionsData = async () => {
+      if (!getFunctionsConfig || !getLastFunctionsResponse) return;
+      
+      try {
+        const [config, response] = await Promise.all([
+          getFunctionsConfig(),
+          getLastFunctionsResponse()
+        ]);
+        
+        setFunctionsConfig(config);
+        setLastFunctionsResponse(response);
+        
+        if (response && response.responseLength > 0) {
+          addNotification('info', 'Functions Data Loaded', 
+            `Last response: ${response.responseLength} bytes from subscription 4996`);
+        }
+      } catch (error) {
+        console.error('Error loading Functions data:', error);
+      }
+    };
+    
+    if (isConnected) {
+      loadFunctionsData();
+    }
+  }, [isConnected, getFunctionsConfig, getLastFunctionsResponse, addNotification]);
+
+  // Real protocol stats from your live contract
   const protocolStats = useMemo(() => ({
     totalVolume: stats?.totalFundsRaised || 0,
     totalInvoices: stats?.totalInvoices || 0,
-    committeeSize: stats?.committeeSize || 0,
-    activeVaults: stats?.activeVaults || 0
+    pendingInvoices: stats?.pendingInvoices || 0,
+    verifiedInvoices: stats?.verifiedInvoices || 0,
+    fundedInvoices: stats?.fundedInvoices || 0
   }), [stats]);
-
-  const userRole = useMemo(() => {
-    if (isOwner) return { type: 'owner', label: 'Contract Owner', color: 'orange' };
-    if (isCommitteeMember) return { 
-      type: 'committee', 
-      label: committeeRole || 'Committee Member', 
-      color: 'purple' 
-    };
-    return null;
-  }, [isOwner, isCommitteeMember, committeeRole]);
 
   const investmentMetrics = useMemo(() => {
     const activeInvestments = investments.filter(inv => inv.status === 'active');
@@ -208,14 +234,14 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
   useEffect(() => {
     if (txHash) {
       addNotification('pending', 'Transaction Submitted', 
-        'Your transaction is being processed on the blockchain...', txHash, false);
+        'Your transaction is being processed on Sepolia testnet...', txHash, false);
     }
   }, [txHash, addNotification]);
 
   useEffect(() => {
     if (isTransactionSuccess && txHash) {
       addNotification('success', 'Transaction Confirmed!', 
-        'Your transaction has been successfully confirmed on the blockchain.', txHash);
+        'Your transaction has been successfully confirmed on Sepolia.', txHash);
     }
   }, [isTransactionSuccess, txHash, addNotification]);
 
@@ -263,7 +289,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
     try {
       await refreshBalance();
       addNotification('success', 'Balance Updated', 
-        `Current balance: ${usdcBalance.toFixed(2)} USDC`);
+        `Current balance: ${usdcBalance.toFixed(2)} USDC from live contract`);
       setLastRefresh(refreshTime);
     } catch (error: any) {
       addNotification('error', 'Refresh Failed', 
@@ -273,7 +299,35 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
     }
   }, [refreshBalance, usdcBalance, isRefreshing, addNotification]);
 
-  // NEW: Price update handlers
+  // Functions testing handler
+  const handleTestFunctions = useCallback(async () => {
+    if (!isConnected) {
+      addNotification('error', 'Wallet Not Connected', 'Please connect your wallet first');
+      return;
+    }
+
+    try {
+      addNotification('info', 'Testing Functions', 'Calling your proven verification module...');
+      const result = await testDirectRequest();
+      
+      if (result.success) {
+        addNotification('success', 'Functions Test Sent!', 
+          'Check subscription 4996 for response (may take 1-2 minutes)', result.hash);
+        
+        // Refresh Functions data after a delay
+        setTimeout(async () => {
+          const response = await getLastFunctionsResponse();
+          setLastFunctionsResponse(response);
+        }, 5000);
+      } else if (result.error) {
+        addNotification('error', 'Functions Test Failed', result.error);
+      }
+    } catch (error: any) {
+      addNotification('error', 'Functions Test Error', error.message || 'Failed to test Functions');
+    }
+  }, [isConnected, testDirectRequest, addNotification, getLastFunctionsResponse]);
+
+  // Price update handlers  
   const handleUpdatePrices = useCallback(async () => {
     if (!isConnected) {
       addNotification('error', 'Wallet Not Connected', 'Please connect your wallet first');
@@ -294,26 +348,6 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
       addNotification('error', 'Price Update Error', error.message || 'Failed to update prices');
     }
   }, [isConnected, updateLivePrices, addNotification, liveMarketData]);
-
-  const handleForceUpdatePrices = useCallback(async () => {
-    if (!isConnected) {
-      addNotification('error', 'Wallet Not Connected', 'Please connect your wallet first');
-      return;
-    }
-
-    try {
-      addNotification('info', 'Force Updating Prices', 'Bypassing staleness checks...');
-      const result = await forceUpdateLivePrices();
-      
-      if (result.success) {
-        addNotification('success', 'Prices Force Updated!', 'Live prices updated successfully');
-      } else if (result.error) {
-        addNotification('error', 'Force Update Failed', result.error);
-      }
-    } catch (error: any) {
-      addNotification('error', 'Force Update Error', error.message || 'Failed to force update prices');
-    }
-  }, [isConnected, forceUpdateLivePrices, addNotification]);
 
   // Enhanced Notification Component
   const NotificationItem = React.memo(({ notification }: { notification: Notification }) => {
@@ -401,7 +435,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-            <span className="ml-2 text-gray-600">Loading your investments from contract...</span>
+            <span className="ml-2 text-gray-600">Loading investments from live contract...</span>
           </div>
         </div>
       );
@@ -413,6 +447,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
           <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-3">
             <TrendingUp className="w-6 h-6 text-green-600" />
             Your Investment Portfolio
+            <span className="text-sm font-normal text-gray-500">(Live Contract Data)</span>
           </h2>
           <div className="text-center py-8 text-gray-500">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -437,7 +472,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
           <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
             <TrendingUp className="w-6 h-6 text-green-600" />
             Your Investment Portfolio
-            <span className="text-sm font-normal text-gray-500">(From Smart Contract)</span>
+            <span className="text-sm font-normal text-gray-500">(From Live Smart Contract)</span>
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
@@ -493,15 +528,15 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
         </div>
         <h2 className="text-3xl font-bold text-gray-900 mb-4">Connect Your Wallet</h2>
         <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-          Connect your wallet to access your YieldX Protocol dashboard with live blockchain data and real Chainlink oracle integration.
+          Connect your wallet to access your YieldX Protocol dashboard with live Sepolia blockchain data and real Chainlink oracle integration.
         </p>
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 max-w-md mx-auto">
           <h3 className="font-semibold text-blue-900 mb-2">🌟 What you'll get access to:</h3>
           <ul className="text-blue-800 space-y-1 text-left">
-            <li>• Live Chainlink price feeds from Sepolia</li>
-            <li>• Real-time protocol statistics from smart contract</li>
+            <li>• Live Chainlink price feeds from Sepolia testnet</li>
+            <li>• Real-time protocol statistics from deployed contracts</li>
             <li>• Your actual investment portfolio from blockchain</li>
-            <li>• Committee member features (if authorized)</li>
+            <li>• Working Chainlink Functions verification</li>
             <li>• Live transaction monitoring</li>
           </ul>
         </div>
@@ -540,19 +575,17 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
         </div>
       )}
 
-      {/* Enhanced Header with Better Address Display */}
+      {/* Enhanced Header with Live Contract Info */}
       <div className="text-center">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent mb-4">
           YieldX Protocol Dashboard
         </h1>
         <div className="flex items-center justify-center gap-4 mb-4 flex-wrap">
-          <p className="text-xl text-gray-600">Live data from Sepolia deployment</p>
-          {userRole && (
-            <div className={`flex items-center gap-2 bg-${userRole.color}-100 text-${userRole.color}-800 px-3 py-1 rounded-full text-sm font-medium`}>
-              <Shield className="w-4 h-4" />
-              {userRole.label}
-            </div>
-          )}
+          <p className="text-xl text-gray-600">Live data from championship Sepolia deployment</p>
+          <div className="flex items-center gap-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            Championship Protocol Live
+          </div>
         </div>
         
         {/* Enhanced Address Display */}
@@ -579,7 +612,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
           </div>
           {copied && <span className="text-green-600 text-xs">Copied!</span>}
         </div>
-        <p className="text-xs text-gray-400 mt-2">Network: Sepolia Testnet</p>
+        <p className="text-xs text-gray-400 mt-2">Network: Sepolia Testnet | Protocol: Live Championship Deployment</p>
       </div>
 
       {/* Investment Portfolio Section */}
@@ -601,36 +634,36 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             ${protocolStats.totalVolume.toLocaleString()}
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            From {protocolStats.totalInvoices} invoices
+            From {protocolStats.totalInvoices} live invoices
           </p>
         </div>
 
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <Users className="w-6 h-6 text-emerald-600" />
+              <FileText className="w-6 h-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-600">Committee Size</p>
-              <p className="text-xs text-purple-600">From contract</p>
+              <p className="text-sm font-medium text-gray-600">Pending Invoices</p>
+              <p className="text-xs text-orange-600">Contract state</p>
             </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{protocolStats.committeeSize}</p>
-          <p className="text-sm text-gray-500 mt-1">Active members</p>
+          <p className="text-3xl font-bold text-gray-900">{protocolStats.pendingInvoices}</p>
+          <p className="text-sm text-gray-500 mt-1">Awaiting verification</p>
         </div>
         
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-              <FileText className="w-6 h-6 text-purple-600" />
+              <CheckCircle className="w-6 h-6 text-purple-600" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Invoices</p>
-              <p className="text-xs text-blue-600">Contract count</p>
+              <p className="text-sm font-medium text-gray-600">Verified</p>
+              <p className="text-xs text-purple-600">Chainlink verified</p>
             </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{protocolStats.totalInvoices}</p>
-          <p className="text-sm text-gray-500 mt-1">Submitted to protocol</p>
+          <p className="text-3xl font-bold text-gray-900">{protocolStats.verifiedInvoices}</p>
+          <p className="text-sm text-gray-500 mt-1">Ready for investment</p>
         </div>
         
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
@@ -654,6 +687,83 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
           </button>
         </div>
       </div>
+
+      {/* Enhanced Chainlink Functions Status Panel */}
+      {functionsConfig && (
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+              <Zap className="w-6 h-6 text-yellow-500" />
+              Chainlink Functions Status
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-sm font-normal text-gray-500">
+                (Your Proven Working Module)
+              </span>
+            </h2>
+            
+            <button
+              onClick={handleTestFunctions}
+              disabled={loading}
+              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 flex items-center gap-2 text-sm"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              Test Functions
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 text-center">
+              <div className="text-4xl mb-2">🔗</div>
+              <p className="text-sm text-gray-600 mb-1">Router</p>
+              <p className="text-sm font-mono text-blue-900 break-all">{functionsConfig.router?.slice(0, 10)}...</p>
+              <p className="text-xs text-blue-600">Chainlink router</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 text-center">
+              <div className="text-4xl mb-2">🆔</div>
+              <p className="text-sm text-gray-600 mb-1">Subscription</p>
+              <p className="text-2xl font-bold text-green-900">{functionsConfig.subscriptionId}</p>
+              <p className="text-xs text-green-600">Your proven sub</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 text-center">
+              <div className="text-4xl mb-2">⛽</div>
+              <p className="text-sm text-gray-600 mb-1">Gas Limit</p>
+              <p className="text-2xl font-bold text-purple-900">{functionsConfig.gasLimit?.toLocaleString()}</p>
+              <p className="text-xs text-purple-600">Function gas</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 text-center">
+              <div className="text-4xl mb-2">📦</div>
+              <p className="text-sm text-gray-600 mb-1">Response Size</p>
+              <p className="text-2xl font-bold text-orange-900">
+                {lastFunctionsResponse?.responseLength || 0}
+              </p>
+              <p className="text-xs text-orange-600">Bytes received</p>
+            </div>
+          </div>
+
+          {/* Functions Response Data */}
+          {lastFunctionsResponse && lastFunctionsResponse.responseLength > 0 && (
+            <div className="mt-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4">
+              <h3 className="font-semibold text-gray-900 mb-2">Latest Functions Response</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Request ID:</p>
+                  <p className="font-mono text-xs text-gray-800 break-all">{lastFunctionsResponse.lastRequestId}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Response Length:</p>
+                  <p className="font-mono text-xs text-gray-800">{lastFunctionsResponse.responseLength} bytes</p>
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-xs text-green-600">✅ Your verification module is working perfectly!</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       
       {/* Enhanced Wallet Actions */}
       <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
@@ -665,7 +775,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">USDC Balance Management</h3>
             <div className="text-center mb-6">
               <p className="text-4xl font-bold text-blue-600 mb-2">{(usdcBalance || 0).toFixed(2)}</p>
-              <p className="text-gray-600">USDC Available (Live)</p>
+              <p className="text-gray-600">USDC Available (Live from Contract)</p>
             </div>
             
             <div className="space-y-3">
@@ -698,7 +808,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             
             <div className="space-y-3">
               <div className="bg-white border border-gray-200 rounded-lg p-3">
-                <p className="text-sm text-gray-600 mb-1">YieldX Protocol</p>
+                <p className="text-sm text-gray-600 mb-1">YieldX Protocol Core</p>
                 <a
                   href={`https://sepolia.etherscan.io/address/${contracts?.PROTOCOL}`}
                   target="_blank"
@@ -711,7 +821,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
               </div>
               
               <div className="bg-white border border-gray-200 rounded-lg p-3">
-                <p className="text-sm text-gray-600 mb-1">Mock USDC</p>
+                <p className="text-sm text-gray-600 mb-1">Mock USDC Token</p>
                 <a
                   href={`https://sepolia.etherscan.io/address/${contracts?.MOCK_USDC}`}
                   target="_blank"
@@ -724,14 +834,14 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
               </div>
               
               <div className="bg-white border border-gray-200 rounded-lg p-3">
-                <p className="text-sm text-gray-600 mb-1">Invoice NFT</p>
+                <p className="text-sm text-gray-600 mb-1">Verification Module (Proven)</p>
                 <a
-                  href={`https://sepolia.etherscan.io/address/${contracts?.INVOICE_NFT}`}
+                  href={`https://sepolia.etherscan.io/address/${contracts?.VERIFICATION_MODULE}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-mono text-xs text-blue-600 hover:underline flex items-center gap-1"
+                  className="font-mono text-xs text-green-600 hover:underline flex items-center gap-1"
                 >
-                  {contracts?.INVOICE_NFT?.slice(0, 20)}...
+                  {contracts?.VERIFICATION_MODULE?.slice(0, 20)}...
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
@@ -762,13 +872,6 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Update Prices
-            </button>
-            <button
-              onClick={handleForceUpdatePrices}
-              disabled={loading}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2 text-sm"
-            >
-              Force Update
             </button>
           </div>
         </div>
@@ -835,14 +938,14 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
       <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
         <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
           <Activity className="w-6 h-6 text-purple-500" />
-          Live Contract Verification
-          <span className="text-sm font-normal text-gray-500">Sepolia Testnet</span>
+          Championship Protocol Contracts
+          <span className="text-sm font-normal text-gray-500">Live Sepolia Deployment</span>
         </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-blue-900">YieldX Protocol Core</h3>
+              <h3 className="font-semibold text-blue-900">YieldX Core Protocol</h3>
               <div className="w-2 h-2 bg-green-400 rounded-full"></div>
             </div>
             <div className="flex items-center gap-2 mb-2">
@@ -869,7 +972,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
           
           <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-green-900">Price Manager Fixed</h3>
+              <h3 className="font-semibold text-green-900">Price Manager</h3>
               <div className="w-2 h-2 bg-green-400 rounded-full"></div>
             </div>
             <div className="flex items-center gap-2 mb-2">
@@ -894,23 +997,50 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             <p className="text-xs text-green-700">Chainlink price feeds</p>
           </div>
           
+          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-yellow-900">Verification Module</h3>
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <code className="font-mono text-xs text-yellow-700 break-all flex-1">
+                {contracts?.VERIFICATION_MODULE}
+              </code>
+              <button
+                onClick={() => navigator.clipboard.writeText(contracts?.VERIFICATION_MODULE || '')}
+                className="text-yellow-600 hover:text-yellow-800"
+              >
+                <Copy className="w-3 h-3" />
+              </button>
+              <a
+                href={`https://sepolia.etherscan.io/address/${contracts?.VERIFICATION_MODULE}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-yellow-600 hover:text-yellow-800"
+              >
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <p className="text-xs text-yellow-700">Proven working Functions</p>
+          </div>
+          
           <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-purple-900">Risk Calculator</h3>
+              <h3 className="font-semibold text-purple-900">Investment Module</h3>
               <div className="w-2 h-2 bg-green-400 rounded-full"></div>
             </div>
             <div className="flex items-center gap-2 mb-2">
               <code className="font-mono text-xs text-purple-700 break-all flex-1">
-                {contracts?.RISK_CALCULATOR}
+                {contracts?.INVESTMENT_MODULE}
               </code>
               <button
-                onClick={() => navigator.clipboard.writeText(contracts?.RISK_CALCULATOR || '')}
+                onClick={() => navigator.clipboard.writeText(contracts?.INVESTMENT_MODULE || '')}
                 className="text-purple-600 hover:text-purple-800"
               >
                 <Copy className="w-3 h-3" />
               </button>
               <a
-                href={`https://sepolia.etherscan.io/address/${contracts?.RISK_CALCULATOR}`}
+                href={`https://sepolia.etherscan.io/address/${contracts?.INVESTMENT_MODULE}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-purple-600 hover:text-purple-800"
@@ -918,7 +1048,34 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
-            <p className="text-xs text-purple-700">APR calculations</p>
+            <p className="text-xs text-purple-700">USDC investment handling</p>
+          </div>
+          
+          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-red-900">VRF Module</h3>
+              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <code className="font-mono text-xs text-red-700 break-all flex-1">
+                {contracts?.VRF_MODULE}
+              </code>
+              <button
+                onClick={() => navigator.clipboard.writeText(contracts?.VRF_MODULE || '')}
+                className="text-red-600 hover:text-red-800"
+              >
+                <Copy className="w-3 h-3" />
+              </button>
+              <a
+                href={`https://sepolia.etherscan.io/address/${contracts?.VRF_MODULE}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-red-600 hover:text-red-800"
+              >
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <p className="text-xs text-red-700">Chainlink VRF randomness</p>
           </div>
           
           <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4">
@@ -947,83 +1104,16 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             </div>
             <p className="text-xs text-orange-700">Test USDC token</p>
           </div>
-          
-          <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-pink-900">Invoice NFT</h3>
-              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-            </div>
-            <div className="flex items-center gap-2 mb-2">
-              <code className="font-mono text-xs text-pink-700 break-all flex-1">
-                {contracts?.INVOICE_NFT}
-              </code>
-              <button
-                onClick={() => navigator.clipboard.writeText(contracts?.INVOICE_NFT || '')}
-                className="text-pink-600 hover:text-pink-800"
-              >
-                <Copy className="w-3 h-3" />
-              </button>
-              <a
-                href={`https://sepolia.etherscan.io/address/${contracts?.INVOICE_NFT}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-pink-600 hover:text-pink-800"
-              >
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-            <p className="text-xs text-pink-700">Trade finance NFTs</p>
-          </div>
-          
-          <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-gray-900">Fallback Contract</h3>
-              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-            </div>
-            <div className="flex items-center gap-2 mb-2">
-              <code className="font-mono text-xs text-gray-700 break-all flex-1">
-                {contracts?.FALLBACK_CONTRACT}
-              </code>
-              <button
-                onClick={() => navigator.clipboard.writeText(contracts?.FALLBACK_CONTRACT || '')}
-                className="text-gray-600 hover:text-gray-800"
-              >
-                <Copy className="w-3 h-3" />
-              </button>
-              <a
-                href={`https://sepolia.etherscan.io/address/${contracts?.FALLBACK_CONTRACT}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-600 hover:text-gray-800"
-              >
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-            <p className="text-xs text-gray-700">Chainlink fallback data</p>
-          </div>
         </div>
         
-        {/* VRF and Functions Subscription Info */}
+        {/* Chainlink Subscription Info */}
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-4">
-            <h3 className="font-semibold text-yellow-900 mb-2">Chainlink VRF Subscription</h3>
-            <p className="font-mono text-xs text-yellow-700 break-all mb-2">
-              35127266008152230287761209727211507096682063164260802445112431263919177634415
-            </p>
-            <a
-              href="https://vrf.chain.link/sepolia/35127266008152230287761209727211507096682063164260802445112431263919177634415"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-yellow-600 hover:underline flex items-center gap-1"
-            >
-              View VRF Dashboard
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-          
           <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-xl p-4">
-            <h3 className="font-semibold text-cyan-900 mb-2">Chainlink Functions Subscription</h3>
-            <p className="font-mono text-xs text-cyan-700 break-all mb-2">4996</p>
+            <h3 className="font-semibold text-cyan-900 mb-2 flex items-center gap-2">
+              Chainlink Functions Subscription
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            </h3>
+            <p className="font-mono text-xl font-bold text-cyan-700 mb-2">4996</p>
             <a
               href="https://functions.chain.link/sepolia/4996"
               target="_blank"
@@ -1031,6 +1121,23 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
               className="text-xs text-cyan-600 hover:underline flex items-center gap-1"
             >
               View Functions Dashboard
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <p className="text-xs text-cyan-600 mt-1">Your proven working subscription!</p>
+          </div>
+          
+          <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-4">
+            <h3 className="font-semibold text-indigo-900 mb-2">Chainlink VRF Subscription</h3>
+            <p className="font-mono text-xs text-indigo-700 break-all mb-2">
+              35127266008152230...
+            </p>
+            <a
+              href="https://vrf.chain.link/sepolia"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-indigo-600 hover:underline flex items-center gap-1"
+            >
+              View VRF Dashboard
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
@@ -1050,7 +1157,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             <h3 className="text-xl font-bold">Submit Invoice</h3>
           </div>
           <p className="text-blue-100 mb-4">
-            Submit your African export invoice and get verified with live Chainlink oracles
+            Submit your African export invoice and get verified with live Chainlink Functions
           </p>
           <div className="flex items-center text-sm">
             <span>Start here →</span>
@@ -1094,56 +1201,20 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
         </div>
       </div>
 
-      {/* Committee/Owner Access */}
-      {(isCommitteeMember || isOwner) && (
-        <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-2xl p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
-                <Shield className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold">
-                  {isOwner ? 'Contract Owner Access' : 'Committee Member Access'}
-                </h3>
-                <p className="text-purple-100">
-                  You have special privileges as {committeeRole}
-                </p>
-                <p className="text-purple-200 text-sm mt-1">
-                  Real permissions from smart contract verification
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setActiveTab('committee')}
-              className="bg-white/20 hover:bg-white/30 px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              Access {isOwner ? 'Admin' : 'Committee'} Dashboard
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Debug Information for Development */}
       {process.env.NODE_ENV === 'development' && (
         <div className="bg-gray-900 text-green-400 rounded-2xl p-6 font-mono text-sm">
-          <h3 className="text-white font-bold mb-4">🔧 Debug Information</h3>
+          <h3 className="text-white font-bold mb-4">🔧 Debug Information (Championship Protocol)</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <p><span className="text-gray-400">Connected:</span> {isConnected ? 'true' : 'false'}</p>
-              <p><span className="text-gray-400">Address:</span> {address || 'Not connected'}</p>
-              <p><span className="text-gray-400">USDC Balance:</span> {usdcBalance}</p>
-              <p><span className="text-gray-400">Committee Member:</span> {isCommitteeMember ? 'true' : 'false'}</p>
-              <p><span className="text-gray-400">Owner:</span> {isOwner ? 'true' : 'false'}</p>
-              <p><span className="text-gray-400">Role:</span> {committeeRole}</p>
+              <p className="text-green-400 mb-1">Contract Addresses:</p>
+              <p className="text-xs">Protocol: {contracts?.PROTOCOL || 'Not loaded'}</p>
+              <p className="text-xs">USDC: {contracts?.MOCK_USDC || 'Not loaded'}</p>
             </div>
             <div>
-              <p><span className="text-gray-400">Total Invoices:</span> {stats?.totalInvoices || 0}</p>
-              <p><span className="text-gray-400">Committee Size:</span> {stats?.committeeSize || 0}</p>
-              <p><span className="text-gray-400">ETH Price:</span> ${liveMarketData?.ethPrice?.toFixed(2) || 'N/A'}</p>
-              <p><span className="text-gray-400">BTC Price:</span> ${liveMarketData?.btcPrice?.toLocaleString() || 'N/A'}</p>
-              <p><span className="text-gray-400">Live Feeds:</span> {liveMarketData?.initialPricesFetched ? 'Active' : 'Default'}</p>
-              <p><span className="text-gray-400">Market Volatility:</span> {(liveMarketData?.marketVolatility * 100)?.toFixed(2) || 'N/A'}%</p>
+              <p className="text-green-400 mb-1">Live Data:</p>
+              <p className="text-xs">Balance: {usdcBalance?.toFixed(2) || '0'} USDC</p>
+              <p className="text-xs">ETH Price: ${liveMarketData?.ethPrice?.toFixed(2) || '0'}</p>
             </div>
           </div>
         </div>
