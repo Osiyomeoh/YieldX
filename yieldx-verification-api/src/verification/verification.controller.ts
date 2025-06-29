@@ -22,6 +22,8 @@ import {
   import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
   import { VerificationService } from './verification.service';
   import { VerificationRequestDto } from './dto/verification-request.dto';
+  import { MinimalVerificationRequestDto } from './dto/minimal-verification-request.dto';
+
   
   @ApiTags('verification')
   @Controller('verification')
@@ -167,7 +169,19 @@ import {
   summary: 'Minimal verification for Chainlink Functions',
   description: 'Returns compact response under 256 bytes for Chainlink Functions'
 })
-async verifyMinimal(@Body() request: any): Promise<string> {
+@ApiResponse({ 
+  status: 200, 
+  description: 'Returns minimal CSV format: "isValid,riskScore,creditRating"',
+  schema: {
+    type: 'string',
+    example: '1,25,A'
+  }
+})
+@ApiResponse({ 
+  status: 400, 
+  description: 'Invalid request data' 
+})
+async verifyMinimal(@Body() request: MinimalVerificationRequestDto): Promise<string> {
   this.logger.log(`🔗 Minimal verification for invoice: ${request.invoiceId}`);
   
   try {
@@ -195,23 +209,23 @@ async verifyMinimal(@Body() request: any): Promise<string> {
     
     // Risk assessment logic
     if (lastDigit < 3) {
-      // Low risk
+      // Low risk (ends in 0,1,2)
       isValid = 1;
       riskScore = 25;
       creditRating = 'A';
     } else if (lastDigit < 7) {
-      // Medium risk
+      // Medium risk (ends in 3,4,5,6)
       isValid = 1;
       riskScore = 35;
       creditRating = 'B';
     } else {
-      // High risk
+      // High risk (ends in 7,8,9)
       isValid = 0;
       riskScore = 75;
       creditRating = 'C';
     }
     
-    // Additional risk factors (optional)
+    // Additional risk factors based on other parameters
     if (amount > 100000) {
       riskScore += 10;
       if (riskScore > 99) riskScore = 99;
@@ -220,13 +234,21 @@ async verifyMinimal(@Body() request: any): Promise<string> {
     if (commodity && commodity.toLowerCase().includes('gold')) {
       riskScore -= 5;
       if (riskScore < 25) riskScore = 25;
+      creditRating = creditRating === 'C' ? 'B' : creditRating;
+    }
+    
+    // High-risk countries (example)
+    const highRiskCountries = ['unknown'];
+    if (supplierCountry && highRiskCountries.includes(supplierCountry.toLowerCase())) {
+      riskScore += 15;
+      if (riskScore > 99) riskScore = 99;
     }
     
     // Return minimal CSV format: "isValid,riskScore,creditRating"
     const result = `${isValid},${riskScore},${creditRating}`;
     
     this.logger.log(`✅ Minimal response: ${result} (${result.length} bytes)`);
-    this.logger.log(`Parameters used: invoice=${invoiceId}, commodity=${commodity}, amount=${amount}`);
+    this.logger.log(`Parameters used: invoice=${invoiceId}, commodity=${commodity}, amount=${amount}, supplier=${supplierCountry}, buyer=${buyerCountry}`);
     
     return result;
     
@@ -237,58 +259,135 @@ async verifyMinimal(@Body() request: any): Promise<string> {
     return "0,99,ERROR";
   }
 }
-    // ============ ALTERNATIVE ENDPOINTS FOR CHAINLINK FUNCTIONS ============
-    @Post('chainlink-verify')
-    @HttpCode(HttpStatus.OK)
-    @Throttle(50, 60) // High limit for Chainlink Functions
-    @ApiOperation({ 
-      summary: 'Chainlink Functions Optimized Endpoint',
-      description: 'Simplified endpoint specifically designed for Chainlink Functions calls'
-    })
-    @ApiResponse({ 
-      status: 200, 
-      description: 'Always returns 200 with verification result',
-      schema: {
-        example: {
-          isValid: true,
-          riskScore: 25,
-          creditRating: "A",
-          details: "Document verified successfully"
-        }
-      }
-    })
-    async chainlinkVerify(@Body() request: any): Promise<any> {
-      this.logger.log(`🔗 Chainlink optimized verification for: ${request.invoiceId || 'unknown'}`);
-      
-      try {
-        // Always return a successful response for Chainlink Functions
-        const mockVerification = await this.verificationService.createChainlinkCompatibleVerification({
-          invoiceId: request.invoiceId || `cl_${Date.now()}`,
-          documentHash: request.documentHash || '0x0000',
-          commodity: request.invoiceDetails?.commodity || request.commodity || 'Trade Goods',
-          amount: request.invoiceDetails?.amount || request.amount || '50000',
-          supplierCountry: request.invoiceDetails?.supplierCountry || request.supplierCountry || 'Kenya',
-          buyerCountry: request.invoiceDetails?.buyerCountry || request.buyerCountry || 'USA',
-          exporterName: request.invoiceDetails?.exporterName || request.exporterName || 'Export Corp',
-          buyerName: request.invoiceDetails?.buyerName || request.buyerName || 'Import Corp'
-        });
 
-        return mockVerification;
-      } catch (error) {
-        // Always return success for Chainlink Functions
-        this.logger.warn(`Chainlink verify fallback for ${request.invoiceId}: ${error.message}`);
+// @Post('verify-minimal')
+// @HttpCode(HttpStatus.OK)
+// @ApiOperation({ 
+//   summary: 'Minimal verification for Chainlink Functions',
+//   description: 'Returns compact response under 256 bytes for Chainlink Functions'
+// })
+// async verifyMinimal(@Body() request: any): Promise<string> {
+//   this.logger.log(`🔗 Minimal verification for invoice: ${request.invoiceId}`);
+  
+//   try {
+//     // Log the incoming request for debugging
+//     this.logger.log(`Request data: ${JSON.stringify(request)}`);
+    
+//     // Extract parameters from request
+//     const invoiceId = request.invoiceId || '999';
+//     const documentHash = request.documentHash || 'test_hash';
+//     const commodity = request.commodity || 'Trade Goods';
+//     const amount = request.amount || 50000;
+//     const supplierCountry = request.supplierCountry || 'Unknown';
+//     const buyerCountry = request.buyerCountry || 'Unknown';
+//     const exporterName = request.exporterName || 'Unknown Exporter';
+//     const buyerName = request.buyerName || 'Unknown Buyer';
+    
+//     this.logger.log(`Processing verification for invoice: ${invoiceId}, commodity: ${commodity}, amount: ${amount}`);
+    
+//     // Simple verification logic based on invoice ID (for testing)
+//     const lastDigit = parseInt(invoiceId.toString()) % 10;
+    
+//     let isValid: number;
+//     let riskScore: number;
+//     let creditRating: string;
+    
+//     // Risk assessment logic
+//     if (lastDigit < 3) {
+//       // Low risk
+//       isValid = 1;
+//       riskScore = 25;
+//       creditRating = 'A';
+//     } else if (lastDigit < 7) {
+//       // Medium risk
+//       isValid = 1;
+//       riskScore = 35;
+//       creditRating = 'B';
+//     } else {
+//       // High risk
+//       isValid = 0;
+//       riskScore = 75;
+//       creditRating = 'C';
+//     }
+    
+//     // Additional risk factors (optional)
+//     if (amount > 100000) {
+//       riskScore += 10;
+//       if (riskScore > 99) riskScore = 99;
+//     }
+    
+//     if (commodity && commodity.toLowerCase().includes('gold')) {
+//       riskScore -= 5;
+//       if (riskScore < 25) riskScore = 25;
+//     }
+    
+//     // Return minimal CSV format: "isValid,riskScore,creditRating"
+//     const result = `${isValid},${riskScore},${creditRating}`;
+    
+//     this.logger.log(`✅ Minimal response: ${result} (${result.length} bytes)`);
+//     this.logger.log(`Parameters used: invoice=${invoiceId}, commodity=${commodity}, amount=${amount}`);
+    
+//     return result;
+    
+//   } catch (error) {
+//     this.logger.error(`❌ Minimal verification failed: ${error.message}`);
+    
+//     // Always return a valid response format for Chainlink Functions
+//     return "0,99,ERROR";
+//   }
+// }
+//     // ============ ALTERNATIVE ENDPOINTS FOR CHAINLINK FUNCTIONS ============
+//     @Post('chainlink-verify')
+//     @HttpCode(HttpStatus.OK)
+//     @Throttle(50, 60) // High limit for Chainlink Functions
+//     @ApiOperation({ 
+//       summary: 'Chainlink Functions Optimized Endpoint',
+//       description: 'Simplified endpoint specifically designed for Chainlink Functions calls'
+//     })
+//     @ApiResponse({ 
+//       status: 200, 
+//       description: 'Always returns 200 with verification result',
+//       schema: {
+//         example: {
+//           isValid: true,
+//           riskScore: 25,
+//           creditRating: "A",
+//           details: "Document verified successfully"
+//         }
+//       }
+//     })
+//     async chainlinkVerify(@Body() request: any): Promise<any> {
+//       this.logger.log(`🔗 Chainlink optimized verification for: ${request.invoiceId || 'unknown'}`);
+      
+//       try {
+//         // Always return a successful response for Chainlink Functions
+//         const mockVerification = await this.verificationService.createChainlinkCompatibleVerification({
+//           invoiceId: request.invoiceId || `cl_${Date.now()}`,
+//           documentHash: request.documentHash || '0x0000',
+//           commodity: request.invoiceDetails?.commodity || request.commodity || 'Trade Goods',
+//           amount: request.invoiceDetails?.amount || request.amount || '50000',
+//           supplierCountry: request.invoiceDetails?.supplierCountry || request.supplierCountry || 'Kenya',
+//           buyerCountry: request.invoiceDetails?.buyerCountry || request.buyerCountry || 'USA',
+//           exporterName: request.invoiceDetails?.exporterName || request.exporterName || 'Export Corp',
+//           buyerName: request.invoiceDetails?.buyerName || request.buyerName || 'Import Corp'
+//         });
+
+//         return mockVerification;
+//       } catch (error) {
+//         // Always return success for Chainlink Functions
+//         this.logger.warn(`Chainlink verify fallback for ${request.invoiceId}: ${error.message}`);
         
-        return {
-          invoiceId: request.invoiceId || `fallback_${Date.now()}`,
-          isValid: true,
-          riskScore: 35,
-          creditRating: 'B',
-          details: 'Fallback verification completed',
-          verificationId: `fb_${Date.now()}`,
-          timestamp: new Date().toISOString()
-        };
-      }
-    }
+//         return {
+//           invoiceId: request.invoiceId || `fallback_${Date.now()}`,
+//           isValid: true,
+//           riskScore: 35,
+//           creditRating: 'B',
+//           details: 'Fallback verification completed',
+//           verificationId: `fb_${Date.now()}`,
+//           timestamp: new Date().toISOString()
+//         };
+//       }
+//     }
 
     // ============ TEST ENDPOINTS ============
     @Get('test')
