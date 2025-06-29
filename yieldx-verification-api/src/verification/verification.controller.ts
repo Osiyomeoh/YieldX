@@ -171,18 +171,70 @@ async verifyMinimal(@Body() request: any): Promise<string> {
   this.logger.log(`🔗 Minimal verification for invoice: ${request.invoiceId}`);
   
   try {
-    // Your verification logic here
-    const verification = await this.verificationService.createChainlinkCompatibleVerification(request);
+    // Log the incoming request for debugging
+    this.logger.log(`Request data: ${JSON.stringify(request)}`);
     
-    // Return minimal format: "valid,risk,rating"
-    const minimalResponse = `${verification.isValid ? '1' : '0'},${verification.riskScore},${verification.creditRating}`;
+    // Extract parameters from request
+    const invoiceId = request.invoiceId || '999';
+    const documentHash = request.documentHash || 'test_hash';
+    const commodity = request.commodity || 'Trade Goods';
+    const amount = request.amount || 50000;
+    const supplierCountry = request.supplierCountry || 'Unknown';
+    const buyerCountry = request.buyerCountry || 'Unknown';
+    const exporterName = request.exporterName || 'Unknown Exporter';
+    const buyerName = request.buyerName || 'Unknown Buyer';
     
-    this.logger.log(`✅ Minimal response: ${minimalResponse} (${minimalResponse.length} bytes)`);
+    this.logger.log(`Processing verification for invoice: ${invoiceId}, commodity: ${commodity}, amount: ${amount}`);
     
-    return minimalResponse;
+    // Simple verification logic based on invoice ID (for testing)
+    const lastDigit = parseInt(invoiceId.toString()) % 10;
+    
+    let isValid: number;
+    let riskScore: number;
+    let creditRating: string;
+    
+    // Risk assessment logic
+    if (lastDigit < 3) {
+      // Low risk
+      isValid = 1;
+      riskScore = 25;
+      creditRating = 'A';
+    } else if (lastDigit < 7) {
+      // Medium risk
+      isValid = 1;
+      riskScore = 35;
+      creditRating = 'B';
+    } else {
+      // High risk
+      isValid = 0;
+      riskScore = 75;
+      creditRating = 'C';
+    }
+    
+    // Additional risk factors (optional)
+    if (amount > 100000) {
+      riskScore += 10;
+      if (riskScore > 99) riskScore = 99;
+    }
+    
+    if (commodity && commodity.toLowerCase().includes('gold')) {
+      riskScore -= 5;
+      if (riskScore < 25) riskScore = 25;
+    }
+    
+    // Return minimal CSV format: "isValid,riskScore,creditRating"
+    const result = `${isValid},${riskScore},${creditRating}`;
+    
+    this.logger.log(`✅ Minimal response: ${result} (${result.length} bytes)`);
+    this.logger.log(`Parameters used: invoice=${invoiceId}, commodity=${commodity}, amount=${amount}`);
+    
+    return result;
+    
   } catch (error) {
     this.logger.error(`❌ Minimal verification failed: ${error.message}`);
-    return "0,99,ERROR"; // Fallback: invalid, high risk, error rating
+    
+    // Always return a valid response format for Chainlink Functions
+    return "0,99,ERROR";
   }
 }
     // ============ ALTERNATIVE ENDPOINTS FOR CHAINLINK FUNCTIONS ============
