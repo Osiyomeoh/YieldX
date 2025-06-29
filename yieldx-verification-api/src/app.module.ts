@@ -7,6 +7,7 @@ import { VerificationModule } from './verification/verification.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { HealthModule } from './health/health.module';
 import { DatabaseModule } from './database/database.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import configuration from './config/configuration';
 
 @Module({
@@ -17,7 +18,7 @@ import configuration from './config/configuration';
       load: [configuration],
       envFilePath: ['.env.local', '.env'],
     }),
-
+    ScheduleModule.forRoot(),
     // Database
     MongooseModule.forRootAsync({
       imports: [ConfigModule],

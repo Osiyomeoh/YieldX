@@ -6,7 +6,7 @@ export class PingService {
   private readonly logger = new Logger(PingService.name);
 
   async pingSelf(): Promise<any> {
-    const apiUrl = 'http://localhost:3000/ping'; // Adjust if running on a different port or behind a proxy
+    const apiUrl = 'https://yieldx.onrender.com/docs'; // Adjust if running on a different port or behind a proxy
     try {
       const startTime = Date.now();
       const response = await axios.get(apiUrl, {
