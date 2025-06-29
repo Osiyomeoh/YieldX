@@ -171,17 +171,22 @@ import {
 })
 @ApiResponse({ 
   status: 200, 
-  description: 'Returns minimal CSV format: "isValid,riskScore,creditRating"',
+  description: 'Returns JSON with result field containing CSV format',
   schema: {
-    type: 'string',
-    example: '1,25,A'
+    type: 'object',
+    properties: {
+      result: {
+        type: 'string',
+        example: '1,25,A'
+      }
+    }
   }
 })
 @ApiResponse({ 
   status: 400, 
   description: 'Invalid request data' 
 })
-async verifyMinimal(@Body() request: MinimalVerificationRequestDto): Promise<string> {
+async verifyMinimal(@Body() request: MinimalVerificationRequestDto): Promise<{result: string}> {
   this.logger.log(`🔗 Minimal verification for invoice: ${request.invoiceId}`);
   
   try {
@@ -244,22 +249,22 @@ async verifyMinimal(@Body() request: MinimalVerificationRequestDto): Promise<str
       if (riskScore > 99) riskScore = 99;
     }
     
-    // Return minimal CSV format: "isValid,riskScore,creditRating"
+    // Create minimal CSV format: "isValid,riskScore,creditRating"
     const result = `${isValid},${riskScore},${creditRating}`;
     
     this.logger.log(`✅ Minimal response: ${result} (${result.length} bytes)`);
     this.logger.log(`Parameters used: invoice=${invoiceId}, commodity=${commodity}, amount=${amount}, supplier=${supplierCountry}, buyer=${buyerCountry}`);
     
-    return result;
+    // Return as JSON object with result property
+    return { result: result };
     
   } catch (error) {
     this.logger.error(`❌ Minimal verification failed: ${error.message}`);
     
     // Always return a valid response format for Chainlink Functions
-    return "0,99,ERROR";
+    return { result: "0,99,ERROR" };
   }
 }
-
 // @Post('verify-minimal')
 // @HttpCode(HttpStatus.OK)
 // @ApiOperation({ 
