@@ -159,7 +159,32 @@ import {
         throw error;
       }
     }
+// Add this to your verification controller
 
+@Post('verify-minimal')
+@HttpCode(HttpStatus.OK)
+@ApiOperation({ 
+  summary: 'Minimal verification for Chainlink Functions',
+  description: 'Returns compact response under 256 bytes for Chainlink Functions'
+})
+async verifyMinimal(@Body() request: any): Promise<string> {
+  this.logger.log(`🔗 Minimal verification for invoice: ${request.invoiceId}`);
+  
+  try {
+    // Your verification logic here
+    const verification = await this.verificationService.createChainlinkCompatibleVerification(request);
+    
+    // Return minimal format: "valid,risk,rating"
+    const minimalResponse = `${verification.isValid ? '1' : '0'},${verification.riskScore},${verification.creditRating}`;
+    
+    this.logger.log(`✅ Minimal response: ${minimalResponse} (${minimalResponse.length} bytes)`);
+    
+    return minimalResponse;
+  } catch (error) {
+    this.logger.error(`❌ Minimal verification failed: ${error.message}`);
+    return "0,99,ERROR"; // Fallback: invalid, high risk, error rating
+  }
+}
     // ============ ALTERNATIVE ENDPOINTS FOR CHAINLINK FUNCTIONS ============
     @Post('chainlink-verify')
     @HttpCode(HttpStatus.OK)
