@@ -250,43 +250,38 @@ npm run gas-report
 - **Geographic Focus**: Africa specialization vs generic approach
 - **Professional Grade**: Enterprise features vs retail-only
 
-🛣️ Roadmap
-Phase 1 (Current - July 2025) - Core Protocol ✅
+## 🛣️ Roadmap
 
-✅ Smart contract architecture
-✅ Chainlink Functions integration
-✅ Invoice verification system
-✅ Investment & yield distribution
-✅ Comprehensive testing
+### Phase 1 (Current - July 2025) - Core Protocol ✅
+- ✅ Smart contract architecture
+- ✅ Chainlink Functions integration
+- ✅ Invoice verification system
+- ✅ Investment & yield distribution
+- ✅ Comprehensive testing
 
-Phase 2 (Q3 2025) - Scale & Security
+### Phase 2 (Q3 2025) - Scale & Security
+- 🔄 Security audit by leading firm
+- 🔄 Mainnet deployment preparation
+- 🔄 Insurance partnerships
+- 🔄 Advanced risk modeling with ML
 
-🔄 Security audit by leading firm
-🔄 Mainnet deployment preparation
-🔄 Insurance partnerships
-🔄 Advanced risk modeling with ML
+### Phase 3 (Q4 2025) - Market Expansion
+- 📅 Nigeria pilot program (100 SMEs)
+- 📅 Bank partnerships for fiat on/off ramps
+- 📅 Mobile app for African exporters
+- 📅 Regulatory compliance framework
 
-Phase 3 (Q4 2025) - Market Expansion
+### Phase 4 (Q1 2026) - Multi-Chain Expansion
+- 📅 CCIP integration for cross-chain assets
+- 📅 Polygon and Avalanche deployment
+- 📅 Advanced automation features
+- 📅 DAO governance implementation
 
-📅 Nigeria pilot program (100 SMEs)
-📅 Bank partnerships for fiat on/off ramps
-📅 Mobile app for African exporters
-📅 Regulatory compliance framework
-
-Phase 4 (Q1 2026) - Multi-Chain Expansion
-
-📅 CCIP integration for cross-chain assets
-📅 Polygon and Avalanche deployment
-📅 Advanced automation features
-📅 DAO governance implementation
-
-Phase 5 (Q2 2026) - Global Scale
-
-📅 Expand to Southeast Asia markets
-📅 Traditional finance partnerships
-📅 Institutional investor onboarding
-📅 $100M+ TVL milestone
-## 📄 Documentation
+### Phase 5 (Q2 2026) - Global Scale
+- 📅 Expand to Southeast Asia markets
+- 📅 Traditional finance partnerships
+- 📅 Institutional investor onboarding
+- 📅 $100M+ TVL milestone
 
 - **[📐 Architecture Guide](docs/ARCHITECTURE.md)** - System design and contract interactions
 - **[💻 Smart Contract API](docs/CONTRACTS.md)** - Function reference and integration
