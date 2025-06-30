@@ -1,19 +1,62 @@
+// components/dashboard/SubmitInvoice.tsx - Corrected Workflow
 import React, { useState, useCallback, useEffect } from 'react';
-import { FileText, Upload, MapPin, DollarSign, Building, Ship, Hash, AlertCircle, CheckCircle, ExternalLink, Loader2, Zap, Shield, RefreshCw, Cloud, CloudUpload, XCircle } from 'lucide-react';
+import { 
+  FileText, Upload, MapPin, DollarSign, Building, Ship, Hash, 
+  AlertCircle, CheckCircle, ExternalLink, Loader2, Zap, Shield, 
+  RefreshCw, Cloud, CloudUpload, XCircle, Eye, Clock, TrendingUp,
+  Star, Award, Globe, Database, Lock, Sparkles, ArrowRight, Play
+} from 'lucide-react';
 import { useYieldX } from '../../hooks/useYieldX';
 import { pinataService } from '../../services/pinataService';
 
 // Required trade documents for compliance
 const TRADE_DOCUMENTS = [
-  { id: 'commercial_invoice', name: 'Commercial Invoice', required: true, icon: FileText },
-  { id: 'export_declaration', name: 'Export Declaration', required: true, icon: Shield },
-  { id: 'certificate_origin', name: 'Certificate of Origin', required: true, icon: Shield },
-  { id: 'bill_of_lading', name: 'Bill of Lading / Air Waybill', required: true, icon: Ship },
-  { id: 'packing_list', name: 'Packing List', required: false, icon: FileText },
-  { id: 'phytosanitary', name: 'Phytosanitary Certificate', required: false, icon: Shield },
+  { id: 'commercial_invoice', name: 'Commercial Invoice', required: true, icon: FileText, description: 'Primary trade document' },
+  { id: 'export_declaration', name: 'Export Declaration', required: true, icon: Shield, description: 'Customs export form' },
+  { id: 'certificate_origin', name: 'Certificate of Origin', required: true, icon: Globe, description: 'Country of origin proof' },
+  { id: 'bill_of_lading', name: 'Bill of Lading / Air Waybill', required: true, icon: Ship, description: 'Transport document' },
+  { id: 'packing_list', name: 'Packing List', required: false, icon: FileText, description: 'Cargo details' },
+  { id: 'phytosanitary', name: 'Phytosanitary Certificate', required: false, icon: Shield, description: 'Plant health certificate' },
 ];
 
+// Popular commodities with risk factors
+const COMMODITY_OPTIONS = [
+  { value: 'Coffee', label: '☕ Coffee', riskFactor: 0.15 },
+  { value: 'Tea', label: '🍃 Tea', riskFactor: 0.12 },
+  { value: 'Cocoa', label: '🍫 Cocoa', riskFactor: 0.18 },
+  { value: 'Gold', label: '🥇 Gold', riskFactor: -0.05 },
+  { value: 'Silver', label: '🥈 Silver', riskFactor: 0.02 },
+  { value: 'Copper', label: '🔶 Copper', riskFactor: 0.08 },
+  { value: 'Cotton', label: '🌱 Cotton', riskFactor: 0.20 },
+  { value: 'Spices', label: '🌶️ Spices', riskFactor: 0.25 },
+];
+
+// Country options with risk assessments
+const COUNTRY_OPTIONS = {
+  suppliers: [
+    { value: 'Kenya', label: '🇰🇪 Kenya', risk: 'low' },
+    { value: 'Ethiopia', label: '🇪🇹 Ethiopia', risk: 'medium' },
+    { value: 'Ghana', label: '🇬🇭 Ghana', risk: 'low' },
+    { value: 'Brazil', label: '🇧🇷 Brazil', risk: 'low' },
+    { value: 'Colombia', label: '🇨🇴 Colombia', risk: 'medium' },
+    { value: 'India', label: '🇮🇳 India', risk: 'medium' },
+    { value: 'Vietnam', label: '🇻🇳 Vietnam', risk: 'medium' },
+    { value: 'Indonesia', label: '🇮🇩 Indonesia', risk: 'medium' }
+  ],
+  buyers: [
+    { value: 'USA', label: '🇺🇸 United States', risk: 'low' },
+    { value: 'UK', label: '🇬🇧 United Kingdom', risk: 'low' },
+    { value: 'Germany', label: '🇩🇪 Germany', risk: 'low' },
+    { value: 'France', label: '🇫🇷 France', risk: 'low' },
+    { value: 'Japan', label: '🇯🇵 Japan', risk: 'low' },
+    { value: 'Canada', label: '🇨🇦 Canada', risk: 'low' },
+    { value: 'Australia', label: '🇦🇺 Australia', risk: 'low' },
+    { value: 'Netherlands', label: '🇳🇱 Netherlands', risk: 'low' }
+  ]
+};
+
 interface SubmitInvoiceForm {
+  invoiceId: string;
   commodity: string;
   amount: string;
   exporterName: string;
@@ -21,6 +64,7 @@ interface SubmitInvoiceForm {
   destination: string;
   description: string;
   originCountry: string;
+  documentHash: string;
 }
 
 interface DocumentUpload {
@@ -33,39 +77,55 @@ interface DocumentUpload {
   error?: string;
 }
 
+interface VerificationResult {
+  verified: boolean;
+  valid: boolean;
+  details: string;
+  risk: number;
+  rating: string;
+  timestamp: number;
+}
+
+// Workflow states
+type WorkflowState = 'form' | 'verifying' | 'verified' | 'ready_for_investment' | 'submitting' | 'completed';
+
 export function SubmitInvoice() {
-  const { 
-    submitInvoice, 
-    approveUSDC,
-    usdcBalance,
-    loading, 
-    isConnected, 
+  // Updated to use the new useYieldX hook structure
+  const {
+    isConnected,
     address,
-    chain,
-    txHash,
-    isTransactionSuccess,
-    contracts,
-    stats,
-    refreshBalance,
-    // Chainlink Functions integration
-    getFunctionsConfig,
-    startDocumentVerification,
+    isLoading,
+    error,
+    protocolStats,
+    invoiceCounter,
+    liveMarketData,
+    usdcBalance,
+    contractAddresses,
+    submitInvoice,
+    approveUSDC,
+    mintTestUSDC,
+    getUSDCAllowance,
     getVerificationData,
+    startDocumentVerification,
+    testVerificationRequest,
   } = useYieldX();
 
+  // Workflow state
+  const [workflowState, setWorkflowState] = useState<WorkflowState>('form');
+
   const [formData, setFormData] = useState<SubmitInvoiceForm>({
-    commodity: '',
+    invoiceId: '',
+    commodity: 'Coffee',
     amount: '',
     exporterName: '',
     buyerName: '',
     destination: '',
     description: '',
-    originCountry: '',
+    originCountry: 'Kenya',
+    documentHash: '',
   });
   
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitResult, setSubmitResult] = useState<{ success: boolean; hash?: string; error?: string } | null>(null);
   const [documents, setDocuments] = useState<DocumentUpload[]>(
     TRADE_DOCUMENTS.map(doc => ({ id: doc.id, file: null, status: 'pending' as const }))
   );
@@ -76,11 +136,37 @@ export function SubmitInvoice() {
   const [uploadingToIPFS, setUploadingToIPFS] = useState<boolean>(false);
   const [metadataURI, setMetadataURI] = useState<string>('');
 
-  // Approval Flow State
-  const [approvalStep, setApprovalStep] = useState<'none' | 'approving' | 'approved' | 'submitting'>('none');
-  const [approvalTxHash, setApprovalTxHash] = useState<string>('');
-  const [submissionTxHash, setSubmissionTxHash] = useState<string>('');
-  const [showApprovalDetails, setShowApprovalDetails] = useState<boolean>(false);
+  // Verification State
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
+  const [verificationProgress, setVerificationProgress] = useState(0);
+
+  // Investment Submission State
+  const [isSubmittingForInvestment, setIsSubmittingForInvestment] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<{ success: boolean; hash?: string; error?: string; invoiceId?: string } | null>(null);
+
+  // Auto-generate invoice ID on mount
+  useEffect(() => {
+    if (!formData.invoiceId) {
+      const invoiceId = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+      setFormData(prev => ({ ...prev, invoiceId }));
+    }
+  }, [formData.invoiceId]);
+
+  // Generate document hash when files change
+  useEffect(() => {
+    const generateDocumentHash = () => {
+      const uploadedFiles = documents.filter(doc => doc.file);
+      if (uploadedFiles.length > 0) {
+        const hashData = uploadedFiles.map(doc => doc.file?.name).join('|') + formData.invoiceId;
+        const hash = `0x${Array.from(hashData).map(char => 
+          char.charCodeAt(0).toString(16).padStart(2, '0')
+        ).join('').substring(0, 64).padEnd(64, '0')}`;
+        setFormData(prev => ({ ...prev, documentHash: hash }));
+      }
+    };
+    generateDocumentHash();
+  }, [documents, formData.invoiceId]);
 
   // Test IPFS connection on mount
   useEffect(() => {
@@ -96,13 +182,6 @@ export function SubmitInvoice() {
     testConnection();
   }, []);
 
-  // Refresh balance after transaction success
-  useEffect(() => {
-    if (isTransactionSuccess && txHash) {
-      refreshBalance();
-    }
-  }, [isTransactionSuccess, txHash, refreshBalance]);
-
   // Calculate document completion
   const requiredDocs = TRADE_DOCUMENTS.filter(doc => doc.required);
   const uploadedRequiredDocs = documents.filter(doc => {
@@ -111,10 +190,50 @@ export function SubmitInvoice() {
   });
   const documentProgress = requiredDocs.length > 0 ? (uploadedRequiredDocs.length / requiredDocs.length) * 100 : 0;
 
+  // Calculate estimated risk
+  const calculateEstimatedRisk = useCallback(() => {
+    let baseRisk = 50;
+    const commodity = COMMODITY_OPTIONS.find(c => c.value === formData.commodity);
+    if (commodity) {
+      baseRisk += commodity.riskFactor * 100;
+    }
+    
+    const amount = parseFloat(formData.amount || '0');
+    if (amount > 100000) baseRisk += 10;
+    if (amount > 500000) baseRisk += 15;
+    
+    const supplierCountry = COUNTRY_OPTIONS.suppliers.find(c => c.value === formData.originCountry);
+    if (supplierCountry?.risk === 'medium') baseRisk += 10;
+    if (supplierCountry?.risk === 'high') baseRisk += 20;
+    
+    return Math.max(10, Math.min(90, Math.round(baseRisk)));
+  }, [formData.commodity, formData.amount, formData.originCountry]);
+
+  // Generate test data
+  const generateTestData = useCallback(() => {
+    const testInvoiceId = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    const commodities = ['Coffee', 'Tea', 'Cocoa', 'Gold', 'Silver'];
+    const amounts = ['25000', '50000', '75000', '100000', '150000'];
+    const countries = ['Kenya', 'Ethiopia', 'Ghana', 'Brazil', 'Colombia'];
+    
+    setFormData({
+      invoiceId: testInvoiceId,
+      commodity: commodities[Math.floor(Math.random() * commodities.length)],
+      amount: amounts[Math.floor(Math.random() * amounts.length)],
+      exporterName: `${countries[Math.floor(Math.random() * countries.length)]} Export Co. Ltd`,
+      buyerName: 'Global Trade Imports Inc.',
+      destination: 'Port of Hamburg, Germany',
+      description: 'Premium grade agricultural commodity for international trade. Fully compliant with international quality standards and trade regulations.',
+      originCountry: countries[Math.floor(Math.random() * countries.length)],
+      documentHash: `0x${Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('')}`
+    });
+  }, []);
+
   // Form validation
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
+    if (!formData.invoiceId.trim()) newErrors.invoiceId = 'Invoice ID is required';
     if (!formData.commodity.trim()) newErrors.commodity = 'Commodity is required';
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
       newErrors.amount = 'Amount must be greater than 0';
@@ -132,12 +251,6 @@ export function SubmitInvoice() {
       newErrors.documents = `Please upload all ${requiredDocs.length} required documents`;
     }
 
-    // Check USDC balance
-    const amount = parseFloat(formData.amount);
-    if (amount > (usdcBalance || 0)) {
-      newErrors.amount = `Insufficient USDC balance. You have ${(usdcBalance || 0).toFixed(2)} USDC`;
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -150,94 +263,10 @@ export function SubmitInvoice() {
     }
   }, [errors]);
 
-  // Upload document to IPFS with progress handling
-  const uploadDocumentToIPFS = useCallback(async (docId: string, file: File): Promise<void> => {
-    if (!ipfsConnected) {
-      console.warn('IPFS not connected, skipping upload');
-      return;
-    }
-
-    const docIndex = documents.findIndex(d => d.id === docId);
-    if (docIndex === -1) return;
-
-    try {
-      // Update status to uploading
-      setDocuments(prev => prev.map((doc, index) => 
-        index === docIndex ? { 
-          ...doc, 
-          status: 'uploading', 
-          progress: 0, 
-          error: undefined 
-        } : doc
-      ));
-
-      // Start progress simulation
-      const progressInterval = setInterval(() => {
-        setDocuments(prev => prev.map((doc, index) => {
-          if (index === docIndex && doc.status === 'uploading') {
-            const currentProgress = doc.progress || 0;
-            const newProgress = Math.min(currentProgress + Math.random() * 15, 85);
-            return { ...doc, progress: newProgress };
-          }
-          return doc;
-        }));
-      }, 300);
-
-      // Upload to IPFS via Pinata
-      const result = await pinataService.uploadFile(file, {
-        name: `${formData.exporterName}_${docId}_${file.name}`,
-        keyvalues: {
-          documentType: docId,
-          invoiceSubmission: 'true',
-          exporter: formData.exporterName,
-          commodity: formData.commodity,
-          timestamp: new Date().toISOString(),
-          submittedBy: address || ''
-        }
-      });
-
-      // Clear progress interval
-      clearInterval(progressInterval);
-
-      if (!result?.IpfsHash) {
-        throw new Error('No IPFS hash returned from upload');
-      }
-
-      // Update with IPFS data
-      setDocuments(prev => prev.map((doc, index) => 
-        index === docIndex ? {
-          ...doc,
-          status: 'uploaded',
-          ipfsHash: result.IpfsHash,
-          ipfsUrl: `https://gateway.pinata.cloud/ipfs/${result.IpfsHash}`,
-          progress: 100,
-          error: undefined
-        } : doc
-      ));
-
-    } catch (error) {
-      console.error('IPFS upload failed:', error);
-      
-      const errorMsg = error instanceof Error ? error.message : 'Upload failed';
-      
-      setDocuments(prev => prev.map((doc, index) => 
-        index === docIndex ? {
-          ...doc,
-          status: 'error',
-          progress: 0,
-          error: errorMsg
-        } : doc
-      ));
-
-      throw error;
-    }
-  }, [documents, ipfsConnected, formData.exporterName, formData.commodity, address]);
-
-  // Handle document upload with validation
+  // Document upload handling
   const handleDocumentUpload = useCallback(async (docId: string, file: File | null) => {
     if (!file) return;
 
-    // Validate file
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
       alert(`File too large: ${file.name} (max 10MB)`);
@@ -253,88 +282,245 @@ export function SubmitInvoice() {
     const docIndex = documents.findIndex(d => d.id === docId);
     if (docIndex === -1) return;
 
-    // Update local state
-    setDocuments(prev => prev.map((doc, index) => 
-      index === docIndex ? { ...doc, file, status: 'pending' } : doc
+      setDocuments(prev => prev.map((doc, index) => 
+      index === docIndex ? { ...doc, file, status: 'uploaded' } : doc
     ));
 
-    // Upload to IPFS if connected
-    if (ipfsConnected) {
-      try {
-        await uploadDocumentToIPFS(docId, file);
-      } catch (error) {
-        console.error('Upload failed:', error);
-      }
-    } else {
-      setDocuments(prev => prev.map((doc, index) => 
-        index === docIndex ? { ...doc, status: 'uploaded' } : doc
-      ));
-    }
-
     // Clear document error
-    if (errors.documents && file) {
+    if (errors.documents) {
       setErrors(prev => ({ ...prev, documents: '' }));
     }
-  }, [documents, ipfsConnected, errors.documents, uploadDocumentToIPFS]);
+  }, [documents, errors.documents]);
 
-  // Retry upload
-  const retryUpload = useCallback(async (docId: string) => {
-    const doc = documents.find(d => d.id === docId);
-    if (!doc?.file) return;
-    
-    try {
-      await uploadDocumentToIPFS(docId, doc.file);
-    } catch (error) {
-      console.error('Retry failed:', error);
+  // STEP 1: Start document verification with form data
+  const handleDocumentVerification = async () => {
+    if (!isConnected) {
+      setErrors({ verification: 'Please connect your wallet first' });
+      return;
     }
-  }, [documents, uploadDocumentToIPFS]);
+    if (!validateForm()) {
+      return;
+    }
+    setWorkflowState('verifying');
+    setIsVerifying(true);
+    setVerificationProgress(0);
+    setVerificationResult(null);
+    setErrors({});
+    try {
+      const progressInterval = setInterval(() => {
+        setVerificationProgress(prev => {
+          if (prev >= 80) return prev;
+          return prev + Math.random() * 10;
+        });
+      }, 1000);
+      // Use the new startDocumentVerification function with proper parameters
+      const verificationData = {
+        invoiceId: formData.invoiceId,
+        documentHash: formData.documentHash,
+        commodity: formData.commodity,
+        amount: formData.amount,
+        supplierCountry: formData.originCountry,
+        buyerCountry: 'USA',
+        exporterName: formData.exporterName,
+        buyerName: formData.buyerName,
+      };
+      const result = await startDocumentVerification(verificationData);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to start verification');
+      }
+      let attempts = 0;
+      const maxAttempts = 30;
+      const pollForResults = async () => {
+        try {
+          attempts++;
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const verification = await getVerificationData(formData.invoiceId);
+          if (verification && verification.verified) {
+            clearInterval(progressInterval);
+            setVerificationProgress(100);
+            const finalVerificationResult = {
+              verified: true,
+              valid: verification.valid,
+              details: verification.details || `YieldX API verification completed. Document ${verification.valid ? 'valid' : 'invalid'}.`,
+              risk: verification.risk,
+              rating: verification.rating,
+              timestamp: verification.timestamp
+            };
+            setVerificationResult(finalVerificationResult);
+            setWorkflowState('verified');
+            setIsVerifying(false);
+            if (verification.valid) {
+              setTimeout(() => {
+                setWorkflowState('ready_for_investment');
+              }, 2000);
+            }
+            return;
+          }
+          if (attempts < maxAttempts) {
+            setTimeout(pollForResults, 4000);
+          } else {
+            clearInterval(progressInterval);
+            setErrors({ verification: 'Verification timeout. Please try again.' });
+            setWorkflowState('form');
+            setIsVerifying(false);
+          }
+        } catch (pollError) {
+          if (attempts < maxAttempts) {
+            setTimeout(pollForResults, 4000);
+          } else {
+            clearInterval(progressInterval);
+            setErrors({ verification: 'Failed to get verification results' });
+            setWorkflowState('form');
+            setIsVerifying(false);
+          }
+        }
+      };
+      setTimeout(pollForResults, 2000);
+    } catch (err: any) {
+      setErrors({ verification: err.message || 'Verification failed' });
+      setWorkflowState('form');
+      setIsVerifying(false);
+    }
+  };
+
+  // STEP 2: Submit for investment (only after successful verification)
+  const submitForInvestment = async () => {
+    if (!verificationResult || !verificationResult.valid) {
+      setErrors({ submission: 'Document must be verified and valid before submission' });
+      return;
+    }
+    setWorkflowState('submitting');
+    setIsSubmittingForInvestment(true);
+    setSubmissionResult(null);
+    try {
+      let finalMetadataURI = '';
+      if (ipfsConnected) {
+        setUploadingToIPFS(true);
+        try {
+          finalMetadataURI = await createAndUploadMetadata();
+        } catch (ipfsError) {}
+        setUploadingToIPFS(false);
+      }
+      // Approve USDC spending for YieldXCore contract
+      const approvalResult = await approveUSDC(contractAddresses.PROTOCOL, formData.amount);
+      if (!approvalResult?.success) {
+        const errorMsg = approvalResult?.error || 'USDC approval failed';
+        setSubmissionResult({ success: false, error: errorMsg });
+        setWorkflowState('ready_for_investment');
+        setIsSubmittingForInvestment(false);
+        return;
+      }
+      // Wait for approval confirmation
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Prepare submission data matching YieldXCore.submitInvoice parameters
+      const dueDate = Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60);
+      const submissionData = {
+        buyer: address || '0x742d35Cc6775C45CB05D4D6c4e6f2b1FE4FBE5A6',
+        amount: formData.amount,
+        commodity: formData.commodity,
+        supplierCountry: formData.originCountry,
+        buyerCountry: 'USA',
+        exporterName: formData.exporterName,
+        buyerName: formData.buyerName,
+        dueDate: dueDate,
+        documentHash: formData.documentHash
+      };
+      const result = await submitInvoice(submissionData);
+      if (result?.success) {
+        setSubmissionResult({
+          success: true,
+          hash: result.txHash,
+          invoiceId: formData.invoiceId
+        });
+        setWorkflowState('completed');
+        setTimeout(() => {
+          resetForm();
+        }, 10000);
+      } else {
+        const errorMsg = result?.error || 'Transaction failed';
+        setSubmissionResult({ success: false, error: errorMsg });
+        setWorkflowState('ready_for_investment');
+      }
+    } catch (error) {
+      let errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      setSubmissionResult({ success: false, error: errorMsg });
+      setWorkflowState('ready_for_investment');
+    } finally {
+      setIsSubmittingForInvestment(false);
+      setUploadingToIPFS(false);
+    }
+  };
+  
+  // Also add debugging functions to check contract state
+  const checkContractState = async () => {
+    try {
+      console.log('🔍 Checking YieldXCore contract state...');
+      
+      // Check if the functions exist in useYieldX
+      const {
+        getAllInvoices,
+        getInvoicesByStatus,
+        getInvestmentOpportunities
+      } = useYieldX();
+      
+      if (getInvestmentOpportunities) {
+        const opportunities = await getInvestmentOpportunities();
+        console.log('💰 Investment opportunities:', opportunities);
+      }
+      
+      if (getAllInvoices) {
+        const allInvoices = await getAllInvoices();
+        console.log('📄 All invoice IDs:', allInvoices);
+      }
+      
+      if (getInvoicesByStatus) {
+        // Check different statuses
+        for (let status = 0; status <= 5; status++) {
+          const invoicesWithStatus = await getInvoicesByStatus(status);
+          console.log(`📋 Status ${status} invoices:`, invoicesWithStatus);
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Error checking contract state:', error);
+    }
+  };
 
   // Create and upload metadata to IPFS
   const createAndUploadMetadata = async (): Promise<string> => {
     const documentHashes = documents
-      .filter(doc => doc.ipfsHash)
+      .filter(doc => doc.ipfsHash || doc.file)
       .map(doc => ({
         type: doc.id,
         name: TRADE_DOCUMENTS.find(d => d.id === doc.id)?.name || doc.id,
-        hash: doc.ipfsHash,
-        url: doc.ipfsUrl,
+        hash: doc.ipfsHash || 'local_file',
+        url: doc.ipfsUrl || '',
         required: TRADE_DOCUMENTS.find(d => d.id === doc.id)?.required || false
       }));
 
     const metadata = {
-      name: `${formData.commodity} Trade Invoice - ${formData.exporterName}`,
+      name: `${formData.commodity} Trade Invoice ${formData.invoiceId}`,
       description: formData.description,
       attributes: [
+        { trait_type: "Invoice ID", value: formData.invoiceId },
         { trait_type: "Commodity", value: formData.commodity },
         { trait_type: "Amount", value: `${formData.amount} USD` },
         { trait_type: "Origin Country", value: formData.originCountry },
         { trait_type: "Destination", value: formData.destination },
         { trait_type: "Exporter", value: formData.exporterName },
         { trait_type: "Buyer", value: formData.buyerName },
+        { trait_type: "Verification Status", value: verificationResult ? "Verified" : "Pending" },
+        { trait_type: "Risk Score", value: verificationResult ? verificationResult.risk.toString() : "TBD" },
+        { trait_type: "Credit Rating", value: verificationResult ? verificationResult.rating : "TBD" },
         { trait_type: "Document Count", value: documentHashes.length.toString() }
       ],
       properties: {
-        invoiceData: {
-          commodity: formData.commodity,
-          amount: formData.amount,
-          originCountry: formData.originCountry,
-          destination: formData.destination,
-          exporterName: formData.exporterName,
-          buyerName: formData.buyerName,
-          description: formData.description,
+        invoiceData: formData,
+        verification: verificationResult,
+        documents: documentHashes,
           submittedAt: new Date().toISOString(),
           submittedBy: address,
-          network: chain?.name || 'Unknown',
-          ipfsEnabled: ipfsConnected
-        },
-        documents: documentHashes,
-        verification: {
-          totalDocuments: documents.length,
-          requiredDocuments: requiredDocs.length,
-          uploadedRequired: uploadedRequiredDocs.length,
-          ipfsDocuments: documentHashes.length,
-          hasAllRequired: uploadedRequiredDocs.length >= requiredDocs.length
-        }
+        network: 'Unknown'
       }
     };
 
@@ -347,12 +533,12 @@ export function SubmitInvoice() {
       });
       
       const result = await pinataService.uploadFile(metadataFile, {
-        name: `${formData.commodity}_${formData.exporterName}_invoice_metadata`,
+        name: `Invoice_${formData.invoiceId}_${formData.commodity}_metadata`,
         keyvalues: {
           type: 'invoice_metadata',
+          invoiceId: formData.invoiceId,
           commodity: formData.commodity,
-          exporter: formData.exporterName,
-          amount: formData.amount,
+          verified: verificationResult ? 'true' : 'false',
           submittedBy: address || '',
           timestamp: new Date().toISOString()
         }
@@ -367,137 +553,53 @@ export function SubmitInvoice() {
     }
   };
 
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!isConnected) {
-      setSubmitResult({
-        success: false,
-        error: 'Please connect your wallet first'
-      });
-      return;
-    }
-
-    if (!validateForm()) return;
-
-    setIsSubmitting(true);
-    setUploadingToIPFS(true);
-    setSubmitResult(null);
-    setApprovalStep('none');
-    setApprovalTxHash('');
-    setSubmissionTxHash('');
-
-    try {
-      let finalMetadataURI = '';
-
-      // Upload metadata to IPFS if connected
-      if (ipfsConnected) {
-        try {
-          finalMetadataURI = await createAndUploadMetadata();
-        } catch (ipfsError) {
-          console.error('IPFS metadata upload failed:', ipfsError);
-        }
-      }
-
-      setUploadingToIPFS(false);
-
-      // Step 1: Approve USDC spending
-      setApprovalStep('approving');
-      
-      const approvalResult = await approveUSDC(contracts.PROTOCOL, formData.amount);
-      
-      if (!approvalResult?.success) {
-        const errorMsg = approvalResult?.error || 'USDC approval failed';
-        setSubmitResult({ success: false, error: errorMsg });
-        setApprovalStep('none');
-        setIsSubmitting(false);
-        return;
-      }
-
-      setApprovalTxHash(approvalResult.hash || '');
-      setApprovalStep('approved');
-
-      // Step 2: Wait for approval confirmation
-      await new Promise(resolve => setTimeout(resolve, 5000));
-
-      // Step 3: Submit the invoice
-      setApprovalStep('submitting');
-
-      const submissionData = {
-        ...formData,
-        metadataURI: finalMetadataURI,
-        buyer: address // Use connected address as buyer
-      };
-
-      const result = await submitInvoice(submissionData);
-      
-      if (result?.success) {
-        setSubmissionTxHash(result.hash || '');
-        
-        setSubmitResult({
-          success: true,
-          hash: result.hash,
-        });
-        
-        // Reset form
+  // Reset form for new submission
+  const resetForm = () => {
+    const newInvoiceId = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
         setFormData({
-          commodity: '',
+      invoiceId: newInvoiceId,
+      commodity: 'Coffee',
           amount: '',
           exporterName: '',
           buyerName: '',
           destination: '',
           description: '',
-          originCountry: '',
+      originCountry: 'Kenya',
+      documentHash: '',
         });
         setDocuments(TRADE_DOCUMENTS.map(doc => ({ id: doc.id, file: null, status: 'pending' as const })));
         setShowDocuments(false);
-        setMetadataURI('');
-        setApprovalStep('none');
-      } else {
-        const errorMsg = result?.error || 'Transaction failed';
-        
-        if (errorMsg.includes('Insufficient allowance')) {
-          setShowApprovalDetails(true);
-        }
-        
-        setSubmitResult({
-          success: false,
-          error: errorMsg
-        });
-      }
-    } catch (error) {
-      console.error('Submit error:', error);
-      let errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
-      
-      if (errorMsg.includes('Insufficient allowance')) {
-        errorMsg = 'USDC approval failed or insufficient allowance. Please try again.';
-        setShowApprovalDetails(true);
-      } else if (errorMsg.includes('insufficient funds')) {
-        errorMsg = 'Insufficient USDC balance or ETH for gas fees.';
-      } else if (errorMsg.includes('user rejected')) {
-        errorMsg = 'Transaction was cancelled by user.';
-      }
-      
-      setSubmitResult({
-        success: false,
-        error: errorMsg
-      });
-    } finally {
-      setIsSubmitting(false);
-      setUploadingToIPFS(false);
-      setApprovalStep('none');
-    }
+        setVerificationResult(null);
+    setSubmissionResult(null);
+    setVerificationProgress(0);
+    setMetadataURI('');
+    setErrors({});
+    setWorkflowState('form');
+  };
+
+  // Risk color coding
+  const getRiskColor = (risk: number): string => {
+    if (risk <= 30) return 'text-green-600';
+    if (risk <= 60) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getRiskBadgeColor = (risk: number): string => {
+    if (risk <= 30) return 'bg-green-100 text-green-800';
+    if (risk <= 60) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-red-100 text-red-800';
   };
 
   // Document Upload Component
   const DocumentUpload = ({ 
     documentType, 
     title, 
+    description,
     required = false 
   }: { 
     documentType: string; 
     title: string; 
+    description: string;
     required?: boolean;
   }) => {
     const doc = documents.find(d => d.id === documentType);
@@ -508,644 +610,1128 @@ export function SubmitInvoice() {
           <div className="flex items-center justify-center mb-2">
             <FileText className="w-8 h-8 text-gray-400" />
           </div>
-          
-          <label className="block">
-            <span className="text-sm font-medium text-gray-700">
-              {title} {required && <span className="text-red-500">*</span>}
-            </span>
-            
-            <input
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              onChange={(e) => handleDocumentUpload(documentType, e.target.files?.[0] || null)}
-              className="hidden"
-            />
-            
-            {!doc?.file ? (
-              <div className="mt-2 cursor-pointer text-blue-600 hover:text-blue-700">
-                <Upload className="w-4 h-4 inline mr-1" />
-                Click to upload or drag file here
-              </div>
-            ) : (
-              <div className="mt-2 space-y-2">
-                <div className="text-sm text-gray-600">
-                  📄 {doc.file.name} ({(doc.file.size / 1024).toFixed(1)} KB)
-                </div>
-                
-                {doc.status === 'uploading' && (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-center space-x-2 text-blue-600">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Uploading... {doc.progress?.toFixed(0) || 0}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${doc.progress || 0}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-                
-                {doc.status === 'uploaded' && (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-center space-x-2 text-green-600">
-                      <CheckCircle className="w-4 h-4" />
-                      <span>Upload complete!</span>
-                    </div>
-                    {doc.ipfsHash && (
-                      <>
-                        <div className="text-xs text-gray-500">
-                          IPFS: {doc.ipfsHash.substring(0, 12)}...
-                        </div>
-                        <a 
-                          href={doc.ipfsUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-700 text-xs flex items-center justify-center"
-                        >
-                          <ExternalLink className="w-3 h-3 mr-1" />
-                          View on IPFS
-                        </a>
-                      </>
-                    )}
-                  </div>
-                )}
-                
-                {doc.status === 'error' && (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-center space-x-2 text-red-600">
-                      <XCircle className="w-4 h-4" />
-                      <span>Upload failed</span>
-                    </div>
-                    {doc.error && (
-                      <div className="text-xs text-red-500">
-                        {doc.error}
-                      </div>
-                    )}
-                    <button
-                      onClick={() => retryUpload(documentType)}
-                      className="text-blue-600 hover:text-blue-700 text-xs flex items-center justify-center"
-                    >
-                      <RefreshCw className="w-3 h-3 mr-1" />
-                      Retry Upload
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </label>
-        </div>
-      </div>
-    );
-  };
 
-  return (
-    <div className="max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="text-center mb-12">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-6">
-          <FileText className="w-10 h-10 text-white" />
-        </div>
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
-          Submit Trade Finance Invoice
-        </h1>
-        <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-          Submit your trade invoice for blockchain verification and tokenization. 
-          Access decentralized finance through YieldX smart contracts.
+<label className="block">
+  <span className="text-sm font-medium text-gray-700">
+    {title} {required && <span className="text-red-500">*</span>}
+  </span>
+            <p className="text-xs text-gray-500 mt-1">{description}</p>
+  
+  <input
+    type="file"
+    accept=".pdf,.jpg,.jpeg,.png"
+    onChange={(e) => handleDocumentUpload(documentType, e.target.files?.[0] || null)}
+    className="hidden"
+              disabled={workflowState !== 'form'}
+  />
+  
+  {!doc?.file ? (
+              <div className={`mt-2 cursor-pointer ${workflowState === 'form' ? 'text-blue-600 hover:text-blue-700' : 'text-gray-400'}`}>
+      <Upload className="w-4 h-4 inline mr-1" />
+                {workflowState === 'form' ? 'Click to upload' : 'Upload disabled during verification'}
+    </div>
+  ) : (
+    <div className="mt-2 space-y-2">
+      <div className="text-sm text-gray-600">
+        📄 {doc.file.name} ({(doc.file.size / 1024).toFixed(1)} KB)
+      </div>
+          <div className="flex items-center justify-center space-x-2 text-green-600">
+            <CheckCircle className="w-4 h-4" />
+                  <span>Ready</span>
+          </div>
+    </div>
+  )}
+</label>
+</div>
+</div>
+);
+};
+
+return (
+    <div className="max-w-6xl mx-auto">
+{/* Header */}
+<div className="text-center mb-12">
+<div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-6">
+<FileText className="w-10 h-10 text-white" />
+</div>
+<h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+          Trade Finance Invoice Submission
+</h1>
+        <p className="text-xl text-gray-600 max-w-4xl mx-auto">
+          Submit your trade invoice for Chainlink verification, then proceed to investment submission. 
+          Complete verification ensures investor confidence in your trade documents.
         </p>
-        
-        <div className="mt-6 flex justify-center gap-4 flex-wrap">
-          {isConnected && (
-            <div className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm">
-              <DollarSign className="w-4 h-4 text-blue-600" />
-              <span>{(usdcBalance || 0).toFixed(2)} USDC Available</span>
-            </div>
-          )}
-        </div>
-        
-        {!isConnected && (
-          <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-            <p className="text-yellow-800 font-medium">
-              ⚠️ Please connect your wallet to submit an invoice
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* Approval Flow Status */}
-      {approvalStep !== 'none' && (
-        <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-          <h4 className="font-medium text-blue-900 mb-3">📋 Submission Process</h4>
-          <div className="space-y-2">
-            <div className={`flex items-center gap-2 text-sm ${
-              approvalStep === 'approving' ? 'text-blue-700' : 
-              (approvalStep === 'approved' || approvalStep === 'submitting') ? 'text-green-700' : 'text-gray-500'
-            }`}>
-              {approvalStep === 'approving' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (approvalStep === 'approved' || approvalStep === 'submitting') ? (
-                <CheckCircle className="w-4 h-4" />
-              ) : (
-                <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
-              )}
-              <span>Step 1: Approve USDC spending</span>
-            </div>
+      {/* Workflow Progress */}
+      <div className="mb-8 bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Submission Progress</h3>
+        <div className="flex items-center justify-between mb-4">
+          {[
+            { key: 'form', label: 'Form Data', icon: FileText },
+            { key: 'verifying', label: 'Verification', icon: Shield },
+            { key: 'verified', label: 'Verified', icon: CheckCircle },
+            { key: 'ready_for_investment', label: 'Ready for Investment', icon: DollarSign },
+            { key: 'completed', label: 'Completed', icon: Star }
+          ].map((step, index) => {
+            const Icon = step.icon;
+            const isActive = workflowState === step.key;
+            const isCompleted = ['form', 'verifying', 'verified', 'ready_for_investment'].indexOf(step.key) < 
+                               ['form', 'verifying', 'verified', 'ready_for_investment', 'completed'].indexOf(workflowState);
             
-            <div className={`flex items-center gap-2 text-sm ${
-              approvalStep === 'submitting' ? 'text-blue-700' : 'text-gray-500'
-            }`}>
-              {approvalStep === 'submitting' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
-              )}
-              <span>Step 2: Submit invoice to blockchain</span>
-            </div>
-          </div>
-          
-          {(approvalTxHash || submissionTxHash) && (
-            <div className="mt-3 flex gap-2">
-              {approvalTxHash && (
-                <a
-                  href={`https://sepolia.etherscan.io/tx/${approvalTxHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200"
-                >
-                  View Approval TX
-                </a>
-              )}
-              {submissionTxHash && (
-                <a
-                  href={`https://sepolia.etherscan.io/tx/${submissionTxHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200"
-                >
-                  View Submission TX
-                </a>
-              )}
-            </div>
-          )}
+            return (
+              <div key={step.key} className="flex flex-col items-center">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 ${
+                  isActive ? 'bg-blue-500 text-white' : 
+                  isCompleted ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
+                }`}>
+                  <Icon className="w-6 h-6" />
+</div>
+                <span className={`text-xs font-medium ${
+                  isActive || isCompleted ? 'text-gray-900' : 'text-gray-500'
+}`}>
+                  {step.label}
+  </span>
+</div>
+            );
+          })}
+  </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div 
+            className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500"
+            style={{ 
+              width: `${
+                workflowState === 'form' ? 0 :
+                workflowState === 'verifying' ? 25 :
+                workflowState === 'verified' ? 50 :
+                workflowState === 'ready_for_investment' ? 75 :
+                workflowState === 'completed' ? 100 : 0
+              }%` 
+            }}
+          />
         </div>
-      )}
+</div>
 
-      {/* Success/Error Messages */}
-      {submitResult && (
-        <div className={`mb-8 p-6 rounded-xl border ${
-          submitResult.success 
-            ? 'bg-green-50 border-green-200 text-green-800' 
-            : 'bg-red-50 border-red-200 text-red-800'
-        }`}>
-          <div className="flex items-center">
-            {submitResult.success ? (
-              <CheckCircle className="w-6 h-6 mr-3" />
-            ) : (
-              <XCircle className="w-6 h-6 mr-3" />
-            )}
-            <div className="flex-1">
-              {submitResult.success ? (
-                <div>
-                  <p className="font-semibold text-lg">🎉 Invoice Successfully Submitted!</p>
-                  <p className="text-sm mt-2">
-                    Your invoice has been submitted to the blockchain for verification.
-                    {ipfsConnected && ' Documents stored on IPFS.'}
-                  </p>
-                  {submitResult.hash && (
-                    <a 
-                      href={`https://sepolia.etherscan.io/tx/${submitResult.hash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center text-green-700 hover:text-green-900 font-medium"
-                    >
-                      View Transaction <ExternalLink className="w-4 h-4 ml-1" />
-                    </a>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <p className="font-semibold">Submission Failed</p>
-                  <p className="text-sm mt-1">{submitResult.error}</p>
-                  {submitResult.error?.includes('allowance') && (
-                    <button
-                      onClick={() => setShowApprovalDetails(true)}
-                      className="mt-2 text-sm text-red-600 underline hover:text-red-800"
-                    >
-                      Learn about USDC approval
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Approval Details */}
-      {showApprovalDetails && (
-        <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-            <div>
-              <h4 className="font-medium text-yellow-900 mb-2">USDC Approval Required</h4>
-              <p className="text-sm text-yellow-800 mb-3">
-                To submit an invoice, you need to approve the YieldX protocol to spend your USDC tokens.
-              </p>
-              <div className="text-xs text-yellow-700 space-y-1">
-                <p>• Step 1: Approve USDC spending (transaction fee required)</p>
-                <p>• Step 2: Submit the invoice (additional transaction fee)</p>
-                <p>• Your USDC remains in your wallet until needed</p>
-                <p>• Current balance: {(usdcBalance || 0).toFixed(2)} USDC</p>
-              </div>
-              <button
-                onClick={() => setShowApprovalDetails(false)}
-                className="mt-3 text-xs text-yellow-600 underline hover:text-yellow-800"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* IPFS Upload Progress */}
-      {uploadingToIPFS && (
+      {/* Current State Display */}
+      {workflowState === 'form' && (
         <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <CloudUpload className="w-5 h-5 animate-bounce text-blue-600 mr-3" />
-              <div>
-                <p className="font-medium text-blue-900">Uploading to IPFS...</p>
-                <p className="text-sm text-blue-700">Storing metadata and documents</p>
-              </div>
-            </div>
-            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-          </div>
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 text-blue-600" />
+            <div>
+              <h4 className="font-medium text-blue-900">Step 1: Complete Form & Upload Documents</h4>
+              <p className="text-sm text-blue-700">Fill out all invoice details and upload required trade documents before verification.</p>
+</div>
+</div>
+</div>
+      )}
+
+      {workflowState === 'verifying' && (
+        <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+              <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+  </div>
+            <div className="flex-1">
+              <h4 className="font-bold text-blue-900 mb-2">Chainlink Functions Verification in Progress</h4>
+              <p className="text-sm text-blue-700 mb-3">
+                Your document is being verified using Chainlink's decentralized oracle network...
+              </p>
+              <div className="w-full bg-blue-200 rounded-full h-3">
+                <div 
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 h-3 rounded-full transition-all duration-500"
+                  style={{ width: `${verificationProgress}%` }}
+                />
+</div>
+              <div className="flex justify-between text-xs text-blue-600 mt-1">
+                <span>Processing...</span>
+                <span>{Math.round(verificationProgress)}%</span>
+  </div>
+</div>
+  </div>
+          
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div className="flex items-center gap-2 text-green-700">
+              <CheckCircle className="w-4 h-4" />
+              <span>Form data sent to Chainlink</span>
+</div>
+            <div className="flex items-center gap-2 text-blue-700">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>API processing verification</span>
+  </div>
+            <div className="flex items-center gap-2 text-gray-500">
+              <Clock className="w-4 h-4" />
+              <span>Awaiting response...</span>
+</div>
+</div>
         </div>
       )}
 
-      {/* Form Container */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200">
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-6">
-          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Zap className="w-6 h-6" />
-            Invoice Submission Form
-          </h2>
-          <p className="text-blue-100 mt-2">
-            Enter trade invoice details for blockchain submission.
-            {ipfsConnected && ' Documents will be stored on IPFS.'}
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                <span className="flex items-center gap-2">
-                  <Hash className="w-4 h-4" />
-                  Commodity/Product
-                  <span className="text-red-500">*</span>
-                </span>
-              </label>
-              <input
-                type="text"
-                value={formData.commodity}
-                onChange={(e) => handleInputChange('commodity', e.target.value)}
-                placeholder="e.g., Coffee Beans, Gold Ore"
-                className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.commodity ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                }`}
-              />
-              {errors.commodity && <p className="text-red-500 text-sm mt-1">{errors.commodity}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                <span className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  Origin Country
-                  <span className="text-red-500">*</span>
-                </span>
-              </label>
-              <input
-                type="text"
-                value={formData.originCountry}
-                onChange={(e) => handleInputChange('originCountry', e.target.value)}
-                placeholder="e.g., Ethiopia, Ghana"
-                className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.originCountry ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                }`}
-              />
-              {errors.originCountry && <p className="text-red-500 text-sm mt-1">{errors.originCountry}</p>}
-            </div>
-          </div>
-
-          <div className="mb-8">
-            <label className="block text-sm font-semibold text-gray-700 mb-3">
-              <span className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4" />
-                Invoice Amount (USD)
-                <span className="text-red-500">*</span>
-              </span>
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                value={formData.amount}
-                onChange={(e) => handleInputChange('amount', e.target.value)}
-                placeholder="Enter amount in USD"
-                min="1"
-                step="0.01"
-                className={`w-full border rounded-xl px-4 py-4 text-lg font-semibold focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                }`}
-              />
-              <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                <span className="text-gray-500 font-medium">USD</span>
-              </div>
-            </div>
-            {errors.amount && <p className="text-red-500 text-sm mt-1">{errors.amount}</p>}
-            <div className="mt-2 text-sm text-gray-600">
-              Available USDC: {(usdcBalance || 0).toFixed(2)} • 
-              {parseFloat(formData.amount || '0') > (usdcBalance || 0) && (
-                <span className="text-red-600 font-medium"> Insufficient balance!</span>
+      {(workflowState === 'verified' || workflowState === 'ready_for_investment') && verificationResult && (
+        <div className="mb-8 p-6 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl">
+          <div className="flex items-start gap-4">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+              verificationResult.valid ? 'bg-green-100' : 'bg-red-100'
+            }`}>
+              {verificationResult.valid ? (
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              ) : (
+                <XCircle className="w-6 h-6 text-red-600" />
               )}
             </div>
-          </div>
+            <div className="flex-1">
+              <h4 className="font-bold text-gray-900 mb-3">
+                ✅ Chainlink Verification Complete
+              </h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="text-center p-3 bg-white rounded-lg border">
+                  <div className="text-lg font-bold mb-1">
+                    {verificationResult.valid ? (
+                      <span className="text-green-600">VALID</span>
+                    ) : (
+                      <span className="text-red-600">INVALID</span>
+                    )}
+  </div>
+                  <div className="text-xs text-gray-600">Document Status</div>
+  </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                <span className="flex items-center gap-2">
-                  <Building className="w-4 h-4" />
-                  Exporter Company
-                  <span className="text-red-500">*</span>
-                </span>
-              </label>
-              <input
-                type="text"
-                value={formData.exporterName}
-                onChange={(e) => handleInputChange('exporterName', e.target.value)}
-                placeholder="Company name"
-                className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.exporterName ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                }`}
-              />
-              {errors.exporterName && <p className="text-red-500 text-sm mt-1">{errors.exporterName}</p>}
-            </div>
+                <div className="text-center p-3 bg-white rounded-lg border">
+                  <div className={`text-lg font-bold mb-1 ${getRiskColor(verificationResult.risk)}`}>
+                    {verificationResult.risk}%
+      </div>
+                  <div className="text-xs text-gray-600">Risk Score</div>
+    </div>
+                
+                <div className="text-center p-3 bg-white rounded-lg border">
+                  <div className={`text-lg font-bold mb-1 ${
+                    verificationResult.rating === 'A' ? 'text-green-600' :
+                    verificationResult.rating === 'B' ? 'text-blue-600' : 'text-red-600'
+                  }`}>
+                    {verificationResult.rating}
+      </div>
+                  <div className="text-xs text-gray-600">Credit Rating</div>
+        </div>
+</div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                <span className="flex items-center gap-2">
-                  <Building className="w-4 h-4" />
-                  Buyer Company
-                  <span className="text-red-500">*</span>
-                </span>
-              </label>
-              <input
-                type="text"
-                value={formData.buyerName}
-                onChange={(e) => handleInputChange('buyerName', e.target.value)}
-                placeholder="Buyer company name"
-                className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.buyerName ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                }`}
-              />
-              {errors.buyerName && <p className="text-red-500 text-sm mt-1">{errors.buyerName}</p>}
-            </div>
-          </div>
-
-          <div className="mb-8">
-            <label className="block text-sm font-semibold text-gray-700 mb-3">
-              <span className="flex items-center gap-2">
-                <Ship className="w-4 h-4" />
-                Destination
-                <span className="text-red-500">*</span>
-              </span>
-            </label>
-            <input
-              type="text"
-              value={formData.destination}
-              onChange={(e) => handleInputChange('destination', e.target.value)}
-              placeholder="Destination port or country"
-              className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                errors.destination ? 'border-red-500 bg-red-50' : 'border-gray-300'
-              }`}
-            />
-            {errors.destination && <p className="text-red-500 text-sm mt-1">{errors.destination}</p>}
-          </div>
-
-          <div className="mb-8">
-            <label className="block text-sm font-semibold text-gray-700 mb-3">
-              Trade Description
-              <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => handleInputChange('description', e.target.value)}
-              placeholder="Describe the goods, quality, packaging..."
-              rows={4}
-              className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                errors.description ? 'border-red-500 bg-red-50' : 'border-gray-300'
-              }`}
-            />
-            <div className="flex justify-between items-center mt-2">
-              <p className="text-sm text-gray-600">
-                Minimum 10 characters • Current: {formData.description.length}
+              <p className="text-sm text-gray-700 mb-2">{verificationResult.details}</p>
+              <p className="text-xs text-gray-500">
+                Verified: {new Date(verificationResult.timestamp * 1000).toLocaleString()}
               </p>
-            </div>
-            {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
-          </div>
 
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <label className="block text-sm font-semibold text-gray-700">
-                Trade Finance Documents
-                <span className="text-red-500">*</span>
-              </label>
+              {verificationResult.valid && workflowState === 'ready_for_investment' && (
+                <div className="mt-4 p-4 bg-green-100 rounded-lg">
+                  <div className="flex items-center gap-2 text-green-800">
+                    <Star className="w-5 h-5" />
+                    <span className="font-medium">
+                      🎉 Document verified successfully! Ready for investment submission.
+                    </span>
+</div>
+</div>
+)}
+
+              {!verificationResult.valid && (
+                <div className="mt-4 p-4 bg-red-100 rounded-lg">
+                  <div className="flex items-center gap-2 text-red-800">
+                    <XCircle className="w-5 h-5" />
+                    <span className="font-medium">
+                      ❌ Document verification failed. Please review and resubmit with valid documents.
+                    </span>
+  </div>
+    </div>
+  )}
+  </div>
+</div>
+</div>
+)}
+
+      {workflowState === 'submitting' && (
+        <div className="mb-8 p-6 bg-purple-50 border border-purple-200 rounded-xl">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+              <Loader2 className="w-6 h-6 text-purple-600 animate-spin" />
+            </div>
+  <div>
+              <h4 className="font-bold text-purple-900">Submitting for Investment</h4>
+              <p className="text-sm text-purple-700">
+                Processing USDC approval and blockchain submission...
+              </p>
+  </div>
+</div>
+</div>
+)}
+
+      {workflowState === 'completed' && submissionResult?.success && (
+        <div className="mb-8 p-6 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+              <Star className="w-6 h-6 text-green-600" />
+            </div>
+  <div className="flex-1">
+              <h3 className="text-lg font-bold text-green-900 mb-2">
+                🎉 Invoice Successfully Submitted for Investment!
+              </h3>
+              <p className="text-green-800 mb-4">
+                Your verified invoice #{submissionResult.invoiceId} has been submitted to the YieldX protocol 
+                and is now available for investor funding.
+              </p>
+              <div className="flex gap-3 flex-wrap">
+                {submissionResult.hash && (
+                  <a 
+                    href={`https://sepolia.etherscan.io/tx/${submissionResult.hash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+                    className="inline-flex items-center px-4 py-2 bg-green-100 hover:bg-green-200 text-green-800 rounded-lg font-medium transition-colors"
+          >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    View Transaction
+          </a>
+        )}
+          <button
+                  onClick={resetForm}
+                  className="inline-flex items-center px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-lg font-medium transition-colors"
+          >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Submit Another Invoice
+          </button>
+      </div>
+  </div>
+</div>
+</div>
+)}
+
+      {/* Error Display */}
+      {Object.keys(errors).length > 0 && (
+        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-xl">
+          <div className="flex items-center gap-2 text-red-800">
+            <XCircle className="w-5 h-5" />
+            <div>
+              {Object.entries(errors).map(([key, error]) => (
+                <p key={key} className="font-medium">{error}</p>
+))}
+</div>
+</div>
+</div>
+)}
+
+      {/* Submission Result Error */}
+      {submissionResult && !submissionResult.success && (
+        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-xl">
+          <div className="flex items-center gap-2 text-red-800">
+            <XCircle className="w-5 h-5" />
+    <div>
+              <p className="font-medium">Investment Submission Failed</p>
+              <p className="text-sm mt-1">{submissionResult.error}</p>
+    </div>
+</div>
+</div>
+)}
+
+      {/* Form Section - Only show when in form state */}
+      {(workflowState === 'form') && (
+<div className="bg-white rounded-2xl shadow-xl border border-gray-200">
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-6 rounded-t-2xl">
+<h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <FileText className="w-6 h-6" />
+              Invoice Details Form
+</h2>
+<p className="text-blue-100 mt-2">
+              Enter complete trade invoice information for Chainlink verification.
+</p>
+</div>
+
+          <div className="p-8">
+            {/* Quick Actions */}
+            <div className="mb-8 flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">Invoice Information</h3>
               <button
                 type="button"
-                onClick={() => setShowDocuments(!showDocuments)}
-                className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
+                onClick={generateTestData}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-100 to-purple-100 hover:from-blue-200 hover:to-purple-200 text-blue-700 rounded-lg transition-all font-medium"
               >
-                Upload Documents {showDocuments ? '↑' : '↓'}
+                <Zap className="w-4 h-4" />
+                Generate Test Data
               </button>
             </div>
 
-            <div className="mb-4 p-4 bg-gray-50 rounded-xl">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Documentation Progress</span>
-                <div className="flex items-center gap-4">
-                  <span className="text-sm text-gray-600">
-                    {uploadedRequiredDocs.length}/{requiredDocs.length} required documents
+            {/* Primary Information */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+  <div>
+    <label className="block text-sm font-semibold text-gray-700 mb-3">
+      <span className="flex items-center gap-2">
+        <Hash className="w-4 h-4" />
+                    Invoice ID
+        <span className="text-red-500">*</span>
+      </span>
+    </label>
+    <input
+      type="text"
+                  value={formData.invoiceId}
+                  onChange={(e) => handleInputChange('invoiceId', e.target.value)}
+      className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.invoiceId ? 'border-red-500 bg-red-50' : 'border-gray-300'
+      }`}
+                  placeholder="Auto-generated"
+    />
+                {errors.invoiceId && <p className="text-red-500 text-sm mt-1">{errors.invoiceId}</p>}
+  </div>
+
+  <div>
+    <label className="block text-sm font-semibold text-gray-700 mb-3">
+      <span className="flex items-center gap-2">
+                    <Ship className="w-4 h-4" />
+                    Commodity/Product
+        <span className="text-red-500">*</span>
+      </span>
+    </label>
+                <select
+                  value={formData.commodity}
+                  onChange={(e) => handleInputChange('commodity', e.target.value)}
+      className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.commodity ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  }`}
+                >
+                  {COMMODITY_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {errors.commodity && <p className="text-red-500 text-sm mt-1">{errors.commodity}</p>}
+  </div>
+</div>
+
+            {/* Amount Section */}
+<div className="mb-8">
+  <label className="block text-sm font-semibold text-gray-700 mb-3">
+    <span className="flex items-center gap-2">
+      <DollarSign className="w-4 h-4" />
+      Invoice Amount (USD)
+      <span className="text-red-500">*</span>
+    </span>
+  </label>
+  <div className="relative">
+    <input
+      type="number"
+      value={formData.amount}
+      onChange={(e) => handleInputChange('amount', e.target.value)}
+      placeholder="Enter amount in USD"
+      min="1"
+      step="0.01"
+                  className={`w-full border rounded-xl px-4 py-4 text-xl font-bold focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+        errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
+      }`}
+    />
+    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                  <span className="text-gray-500 font-medium text-lg">USD</span>
+    </div>
+  </div>
+  {errors.amount && <p className="text-red-500 text-sm mt-1">{errors.amount}</p>}
+              
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                  <span className="text-blue-700">Available USDC:</span>
+                  <span className="font-semibold text-blue-900">{(usdcBalance || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-gray-700">Estimated Risk:</span>
+                  <span className={`font-semibold ${getRiskColor(calculateEstimatedRisk())}`}>
+                    {calculateEstimatedRisk()}%
                   </span>
-                  {ipfsConnected && (
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                      IPFS Ready
-                    </span>
-                  )}
                 </div>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all"
-                  style={{ width: `${documentProgress}%` }}
-                ></div>
-              </div>
-            </div>
+                <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                  <span className="text-purple-700">Current Status:</span>
+                  <span className="font-semibold text-purple-900">Ready to Verify</span>
+                </div>
+  </div>
+</div>
 
-            {showDocuments && (
-              <div className="space-y-4 p-6 bg-gray-50 rounded-xl">
-                {TRADE_DOCUMENTS.map((docTemplate) => (
-                  <DocumentUpload
-                    key={docTemplate.id}
-                    documentType={docTemplate.id}
-                    title={docTemplate.name}
-                    required={docTemplate.required}
-                  />
-                ))}
-              </div>
-            )}
-            
-            {errors.documents && <p className="text-red-500 text-sm mt-1">{errors.documents}</p>}
-          </div>
+            {/* Company Information */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+  <div>
+    <label className="block text-sm font-semibold text-gray-700 mb-3">
+      <span className="flex items-center gap-2">
+        <Building className="w-4 h-4" />
+        Exporter Company
+        <span className="text-red-500">*</span>
+      </span>
+    </label>
+    <input
+      type="text"
+      value={formData.exporterName}
+      onChange={(e) => handleInputChange('exporterName', e.target.value)}
+                  placeholder="Exporting company name"
+      className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+        errors.exporterName ? 'border-red-500 bg-red-50' : 'border-gray-300'
+      }`}
+    />
+    {errors.exporterName && <p className="text-red-500 text-sm mt-1">{errors.exporterName}</p>}
+  </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-8">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Shield className="w-6 h-6 text-blue-600" />
-              </div>
+  <div>
+    <label className="block text-sm font-semibold text-gray-700 mb-3">
+      <span className="flex items-center gap-2">
+        <Building className="w-4 h-4" />
+        Buyer Company
+        <span className="text-red-500">*</span>
+      </span>
+    </label>
+    <input
+      type="text"
+      value={formData.buyerName}
+      onChange={(e) => handleInputChange('buyerName', e.target.value)}
+      placeholder="Buyer company name"
+      className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+        errors.buyerName ? 'border-red-500 bg-red-50' : 'border-gray-300'
+      }`}
+    />
+    {errors.buyerName && <p className="text-red-500 text-sm mt-1">{errors.buyerName}</p>}
+  </div>
+</div>
+
+            {/* Location Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
               <div>
-                <h4 className="font-semibold text-blue-900 mb-2">🔒 Submission Process</h4>
-                <div className="space-y-2 text-sm text-blue-800">
-                  <p>• Approve USDC spending (one-time transaction)</p>
-                  <p>• Submit invoice to YieldX protocol</p>
-                  <p>• {ipfsConnected ? 'Documents stored on IPFS' : 'Documents stored locally'}</p>
-                  <p>• Smart contract verification</p>
-                  <p>• Committee review and processing</p>
-                  {ipfsConnected && <p className="text-green-700">• ✅ IPFS ensures permanent storage</p>}
-                </div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  <span className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
+                    Origin Country
+                    <span className="text-red-500">*</span>
+                  </span>
+                </label>
+                <select
+                  value={formData.originCountry}
+                  onChange={(e) => handleInputChange('originCountry', e.target.value)}
+                  className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.originCountry ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  }`}
+                >
+                  {COUNTRY_OPTIONS.suppliers.map(country => (
+                    <option key={country.value} value={country.value}>
+                      {country.label}
+                    </option>
+                  ))}
+                </select>
+                {errors.originCountry && <p className="text-red-500 text-sm mt-1">{errors.originCountry}</p>}
               </div>
-            </div>
-          </div>
 
-          <div className="flex items-center justify-between pt-6 border-t border-gray-200">
-            <div className="text-sm text-gray-500">
-              <span className="text-red-500">*</span> Required fields
-              {documentProgress < 100 && (
-                <div className="mt-1">
-                  📄 {requiredDocs.length - uploadedRequiredDocs.length} required documents missing
-                </div>
-              )}
-              {ipfsConnected && (
-                <div className="mt-1 text-green-600">
-                  ☁️ IPFS storage enabled
-                </div>
-              )}
-              <div className="mt-1 text-blue-600">
-                💰 Balance: {(usdcBalance || 0).toFixed(2)} USDC
+              <div>
+  <label className="block text-sm font-semibold text-gray-700 mb-3">
+    <span className="flex items-center gap-2">
+      <Ship className="w-4 h-4" />
+      Destination
+      <span className="text-red-500">*</span>
+    </span>
+  </label>
+  <input
+    type="text"
+    value={formData.destination}
+    onChange={(e) => handleInputChange('destination', e.target.value)}
+                  placeholder="Destination port, city, or country"
+    className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+      errors.destination ? 'border-red-500 bg-red-50' : 'border-gray-300'
+    }`}
+  />
+  {errors.destination && <p className="text-red-500 text-sm mt-1">{errors.destination}</p>}
               </div>
-            </div>
-            <button
-              type="submit"
-              disabled={
-                isSubmitting || 
-                loading || 
-                !isConnected || 
-                documentProgress < 100 || 
-                uploadingToIPFS ||
-                parseFloat(formData.amount || '0') > (usdcBalance || 0) ||
-                approvalStep !== 'none'
-              }
-              className={`px-8 py-4 rounded-xl font-semibold text-white transition-all ${
-                isSubmitting || loading || !isConnected || documentProgress < 100 || uploadingToIPFS || parseFloat(formData.amount || '0') > (usdcBalance || 0) || approvalStep !== 'none'
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:scale-105'
-              }`}
-            >
-              {uploadingToIPFS ? (
-                <span className="flex items-center gap-3">
-                  <CloudUpload className="w-5 h-5 animate-bounce" />
-                  Uploading to IPFS...
-                </span>
-              ) : approvalStep === 'approving' ? (
-                <span className="flex items-center gap-3">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Approving USDC...
-                </span>
-              ) : approvalStep === 'submitting' ? (
-                <span className="flex items-center gap-3">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Submitting to Blockchain...
-                </span>
-              ) : isSubmitting || loading ? (
-                <span className="flex items-center gap-3">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Processing...
-                </span>
-              ) : !isConnected ? (
-                <span className="flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5" />
-                  Connect Wallet First
-                </span>
-              ) : parseFloat(formData.amount || '0') > (usdcBalance || 0) ? (
-                <span className="flex items-center gap-3">
-                  <XCircle className="w-5 h-5" />
-                  Insufficient USDC Balance
-                </span>
-              ) : documentProgress < 100 ? (
-                <span className="flex items-center gap-3">
-                  <FileText className="w-5 h-5" />
-                  Complete Documents ({Math.round(documentProgress)}%)
-                </span>
-              ) : (
-                <span className="flex items-center gap-3">
-                  <FileText className="w-5 h-5" />
-                  Submit Invoice
-                  {ipfsConnected && ' + IPFS'}
-                </span>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
+</div>
 
-      <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200">
-          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
-            <Shield className="w-6 h-6 text-green-600" />
-          </div>
-          <h3 className="font-semibold text-gray-900 mb-2">Secure Process</h3>
-          <p className="text-sm text-gray-600">
-            Two-step approval process ensures your funds remain secure.
-          </p>
-        </div>
+            {/* Description */}
+<div className="mb-8">
+  <label className="block text-sm font-semibold text-gray-700 mb-3">
+    Trade Description
+    <span className="text-red-500">*</span>
+  </label>
+  <textarea
+    value={formData.description}
+    onChange={(e) => handleInputChange('description', e.target.value)}
+                placeholder="Describe the goods, quality, packaging, terms, and any special requirements..."
+    rows={4}
+    className={`w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+      errors.description ? 'border-red-500 bg-red-50' : 'border-gray-300'
+    }`}
+  />
+  <div className="flex justify-between items-center mt-2">
+    <p className="text-sm text-gray-600">
+      Minimum 10 characters • Current: {formData.description.length}
+    </p>
+                <div className="text-sm text-gray-500">
+                  {formData.description.length >= 10 ? '✓' : '✗'} Requirement met
+                </div>
+  </div>
+  {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
+</div>
 
-        <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200">
-          <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
-            <Cloud className="w-6 h-6 text-purple-600" />
-          </div>
-          <h3 className="font-semibold text-gray-900 mb-2">IPFS Storage</h3>
-          <p className="text-sm text-gray-600">
-            {ipfsConnected 
-              ? 'Documents stored permanently on IPFS.'
-              : 'IPFS integration ready for storage.'}
-          </p>
-        </div>
+            {/* Document Upload Section */}
+<div className="mb-8">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Trade Finance Documents</h3>
+                  <p className="text-sm text-gray-600 mt-1">Upload required compliance documents for verification</p>
+                </div>
+    <button
+      type="button"
+      onClick={() => setShowDocuments(!showDocuments)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-medium transition-colors"
+    >
+                  <Upload className="w-4 h-4" />
+                  {showDocuments ? 'Hide Documents' : 'Upload Documents'}
+                  {showDocuments ? '↑' : '↓'}
+    </button>
+  </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200">
-          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
-            <DollarSign className="w-6 h-6 text-blue-600" />
-          </div>
-          <h3 className="font-semibold text-gray-900 mb-2">Transparent</h3>
-          <p className="text-sm text-gray-600">
-            Track every step from submission to blockchain confirmation.
-          </p>
-        </div>
+              {/* Document Progress */}
+              <div className="mb-6 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl border">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-medium text-gray-900">Documentation Progress</span>
+      <div className="flex items-center gap-4">
+        <span className="text-sm text-gray-600">
+          {uploadedRequiredDocs.length}/{requiredDocs.length} required documents
+        </span>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
+                      📄 Required for verification
+          </span>
       </div>
     </div>
-  );
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+      <div 
+                    className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-500 ease-out"
+        style={{ width: `${documentProgress}%` }}
+      ></div>
+    </div>
+                <div className="flex justify-between text-xs text-gray-600 mt-2">
+                  <span>0%</span>
+                  <span className="font-medium">{Math.round(documentProgress)}% Complete</span>
+                  <span>100%</span>
+                </div>
+  </div>
+
+  {showDocuments && (
+                <div className="space-y-6 p-6 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {TRADE_DOCUMENTS.map((docTemplate) => (
+        <DocumentUpload
+          key={docTemplate.id}
+          documentType={docTemplate.id}
+          title={docTemplate.name}
+                        description={docTemplate.description}
+          required={docTemplate.required}
+        />
+      ))}
+                  </div>
+    </div>
+  )}
+  
+              {errors.documents && <p className="text-red-500 text-sm mt-3">{errors.documents}</p>}
+</div>
+
+            {/* Verification Button */}
+            <div className="pt-6 border-t border-gray-200">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-red-500">*</span>
+                    <span>Required fields</span>
+    </div>
+                  {documentProgress < 100 && (
+                    <div className="flex items-center gap-2">
+                      📄 <span>{requiredDocs.length - uploadedRequiredDocs.length} required documents missing</span>
+      </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    🔍 <span>Next: Chainlink verification with form data</span>
+  </div>
+</div>
+
+                <button
+                  onClick={handleDocumentVerification}
+                  disabled={
+                    !isConnected || 
+                    documentProgress < 100 || 
+                    isVerifying ||
+                    !formData.invoiceId ||
+                    !formData.commodity ||
+                    !formData.amount ||
+                    !formData.exporterName ||
+                    !formData.buyerName
+                  }
+                  className={`px-8 py-4 rounded-xl font-bold text-white transition-all min-w-[250px] ${
+                    !isConnected || documentProgress < 100 || isVerifying || !formData.invoiceId || !formData.commodity || !formData.amount || !formData.exporterName || !formData.buyerName
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 transform hover:scale-105 shadow-lg'
+                  }`}
+                >
+                  {isVerifying ? (
+                    <span className="flex items-center justify-center gap-3">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Verifying via Chainlink...
+                    </span>
+                  ) : !isConnected ? (
+                    <span className="flex items-center justify-center gap-3">
+                      <AlertCircle className="w-5 h-5" />
+                      Connect Wallet
+                    </span>
+                  ) : documentProgress < 100 ? (
+                    <span className="flex items-center justify-center gap-3">
+                      <Upload className="w-5 h-5" />
+                      Upload Documents ({Math.round(documentProgress)}%)
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-3">
+                      <Shield className="w-5 h-5" />
+                      Start Chainlink Verification
+                      <ArrowRight className="w-4 h-4" />
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+      </div>
+    )}
+
+      {/* Investment Submission Button - Only show when ready */}
+      {workflowState === 'ready_for_investment' && verificationResult?.valid && (
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200">
+          <div className="bg-gradient-to-r from-green-600 to-blue-600 px-8 py-6 rounded-t-2xl">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <DollarSign className="w-6 h-6" />
+              Ready for Investment Submission
+            </h2>
+            <p className="text-green-100 mt-2">
+              Your document has been verified successfully. Submit to YieldX protocol for investor funding.
+            </p>
+          </div>
+          // Part 3 (Final) continuation of corrected SubmitInvoice.tsx
+
+          <div className="p-8">
+            {/* Investment Summary */}
+            <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <span className="font-semibold text-green-900">Verified Invoice</span>
+                </div>
+                <p className="text-sm text-green-700">
+                  Invoice #{formData.invoiceId} has passed Chainlink verification
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <DollarSign className="w-5 h-5 text-blue-600" />
+                  <span className="font-semibold text-blue-900">Investment Amount</span>
+                </div>
+                <p className="text-lg font-bold text-blue-900">${parseFloat(formData.amount).toLocaleString()} USD</p>
+              </div>
+
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <Star className="w-5 h-5 text-purple-600" />
+                  <span className="font-semibold text-purple-900">Risk Rating</span>
+                </div>
+                <p className={`text-lg font-bold ${getRiskColor(verificationResult.risk)}`}>
+                  {verificationResult.risk}% • {verificationResult.rating}
+                </p>
+              </div>
+            </div>
+
+            {/* Investment Details */}
+            <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border">
+              <h4 className="font-bold text-blue-900 mb-4">📊 Investment Submission Details</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Commodity:</span>
+                    <span className="font-medium">{formData.commodity}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Origin:</span>
+                    <span className="font-medium">{formData.originCountry}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Destination:</span>
+                    <span className="font-medium">{formData.destination}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Exporter:</span>
+                    <span className="font-medium">{formData.exporterName}</span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Invoice Amount:</span>
+                    <span className="font-bold text-blue-900">${parseFloat(formData.amount).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Risk Score:</span>
+                    <span className={`font-bold ${getRiskColor(verificationResult.risk)}`}>
+                      {verificationResult.risk}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Credit Rating:</span>
+                    <span className={`font-bold ${
+                      verificationResult.rating === 'A' ? 'text-green-600' :
+                      verificationResult.rating === 'B' ? 'text-blue-600' : 'text-red-600'
+                    }`}>
+                      {verificationResult.rating}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Documents:</span>
+                    <span className="font-medium">{uploadedRequiredDocs.length}/{requiredDocs.length} Complete</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* USDC Balance Check */}
+            <div className="mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="w-4 h-4 text-yellow-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-medium text-yellow-900 mb-2">💰 USDC Balance & Approval</h4>
+                  <div className="space-y-2 text-sm text-yellow-800">
+                    <div className="flex justify-between">
+                      <span>Your USDC Balance:</span>
+                      <span className="font-bold">{(usdcBalance || 0).toFixed(2)} USDC</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Required for Investment:</span>
+                      <span className="font-bold">{parseFloat(formData.amount).toFixed(2)} USDC</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Status:</span>
+                      <span className={`font-bold ${
+                        parseFloat(formData.amount) <= (usdcBalance || 0) ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {parseFloat(formData.amount) <= (usdcBalance || 0) ? '✅ Sufficient' : '❌ Insufficient'}
+                      </span>
+                    </div>
+                  </div>
+                  {parseFloat(formData.amount) > (usdcBalance || 0) && (
+                    <div className="mt-3 p-3 bg-red-100 rounded-lg">
+                      <p className="text-red-800 text-sm font-medium">
+                        ⚠️ You need {(parseFloat(formData.amount) - (usdcBalance || 0)).toFixed(2)} more USDC to proceed.
+                      </p>
+      </div>
+    )}
+                </div>
+              </div>
+            </div>
+
+            {/* Investment Process Info */}
+            <div className="mb-8 p-6 bg-gray-50 rounded-xl border">
+              <h4 className="font-bold text-gray-900 mb-4">🔄 Investment Submission Process</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-600">1</div>
+                    <span>Approve USDC spending for protocol</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-600">2</div>
+                    <span>Submit invoice with verification data</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-600">3</div>
+                    <span>USDC transferred to protocol escrow</span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center text-xs font-bold text-green-600">4</div>
+                    <span>Invoice NFT minted with metadata</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center text-xs font-bold text-green-600">5</div>
+                    <span>Available for investor funding</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center text-xs font-bold text-green-600">6</div>
+                    <span>Generate yield for investors</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* IPFS Upload Progress */}
+            {uploadingToIPFS && (
+              <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <CloudUpload className="w-5 h-5 animate-bounce text-purple-600 mr-3" />
+                    <div>
+                      <p className="font-medium text-purple-900">Uploading to IPFS...</p>
+                      <p className="text-sm text-purple-700">Storing verified metadata permanently</p>
+                    </div>
+                  </div>
+                  <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                </div>
+      </div>
+    )}
+
+            {/* Submit for Investment Button */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="text-sm text-gray-600 space-y-1">
+                <div className="flex items-center gap-2">
+                  ✅ <span>Document verified by Chainlink</span>
+    </div>
+                <div className="flex items-center gap-2">
+                  📄 <span>All required documents uploaded</span>
+  </div>
+                <div className="flex items-center gap-2">
+                  🔗 <span>Ready for blockchain submission</span>
+                </div>
+                {ipfsConnected && (
+                  <div className="flex items-center gap-2">
+                    ☁️ <span className="text-green-600">IPFS storage enabled</span>
+                  </div>
+                )}
+              </div>
+
+  <button
+                onClick={submitForInvestment}
+    disabled={
+                  isSubmittingForInvestment || 
+      !isConnected || 
+                  parseFloat(formData.amount) > (usdcBalance || 0) ||
+                  uploadingToIPFS
+                }
+                className={`px-8 py-4 rounded-xl font-bold text-white transition-all min-w-[280px] ${
+                  isSubmittingForInvestment || !isConnected || parseFloat(formData.amount) > (usdcBalance || 0) || uploadingToIPFS
+        ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 transform hover:scale-105 shadow-xl'
+    }`}
+  >
+    {uploadingToIPFS ? (
+                  <span className="flex items-center justify-center gap-3">
+        <CloudUpload className="w-5 h-5 animate-bounce" />
+        Uploading to IPFS...
+      </span>
+                ) : isSubmittingForInvestment ? (
+                  <span className="flex items-center justify-center gap-3">
+        <Loader2 className="w-5 h-5 animate-spin" />
+                    Submitting for Investment...
+      </span>
+    ) : !isConnected ? (
+                  <span className="flex items-center justify-center gap-3">
+        <AlertCircle className="w-5 h-5" />
+                    Connect Wallet
+      </span>
+                ) : parseFloat(formData.amount) > (usdcBalance || 0) ? (
+                  <span className="flex items-center justify-center gap-3">
+        <XCircle className="w-5 h-5" />
+        Insufficient USDC Balance
+      </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-3">
+                    <Sparkles className="w-5 h-5" />
+                    Submit for Investment
+        {ipfsConnected && ' + IPFS'}
+                    <Play className="w-4 h-4" />
+      </span>
+    )}
+  </button>
+</div>
+</div>
+        </div>
+      )}
+
+      {/* Invalid Document State */}
+      {workflowState === 'verified' && verificationResult && !verificationResult.valid && (
+        <div className="bg-white rounded-2xl shadow-xl border border-red-200">
+          <div className="bg-gradient-to-r from-red-600 to-orange-600 px-8 py-6 rounded-t-2xl">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <XCircle className="w-6 h-6" />
+              Document Verification Failed
+            </h2>
+            <p className="text-red-100 mt-2">
+              Your document did not pass verification. Please review and resubmit with valid documents.
+            </p>
+          </div>
+
+          <div className="p-8">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+              <div className="flex items-center gap-3 mb-3">
+                <XCircle className="w-6 h-6 text-red-600" />
+                <span className="font-bold text-red-900">Verification Issues</span>
+              </div>
+              <p className="text-red-800 text-sm">{verificationResult.details}</p>
+              <div className="mt-3 grid grid-cols-3 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-red-600">INVALID</div>
+                  <div className="text-red-700">Status</div>
+                </div>
+                <div className="text-center">
+                  <div className={`text-lg font-bold ${getRiskColor(verificationResult.risk)}`}>
+                    {verificationResult.risk}%
+                  </div>
+                  <div className="text-red-700">Risk Score</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-red-600">{verificationResult.rating}</div>
+                  <div className="text-red-700">Rating</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                onClick={resetForm}
+                className="flex items-center gap-2 px-6 py-3 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-lg font-medium transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Start Over
+              </button>
+              <button
+                onClick={() => setWorkflowState('form')}
+                className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors"
+              >
+                <FileText className="w-4 h-4" />
+                Edit Invoice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feature Cards - Only show in form state */}
+      {workflowState === 'form' && (
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
+<div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
+  <Shield className="w-6 h-6 text-green-600" />
+</div>
+            <h3 className="font-bold text-gray-900 mb-2">Chainlink Verified</h3>
+<p className="text-sm text-gray-600">
+              Real-time document verification using Chainlink Functions with your form data.
+</p>
+</div>
+
+          <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
+<div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+  <Cloud className="w-6 h-6 text-purple-600" />
+</div>
+            <h3 className="font-bold text-gray-900 mb-2">IPFS Storage</h3>
+<p className="text-sm text-gray-600">
+  {ipfsConnected 
+                ? 'Documents and metadata stored permanently on IPFS.'
+                : 'IPFS integration ready for decentralized storage.'}
+</p>
+</div>
+
+          <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
+              <Lock className="w-6 h-6 text-blue-600" />
+</div>
+            <h3 className="font-bold text-gray-900 mb-2">Secure Process</h3>
+<p className="text-sm text-gray-600">
+              Verification first, then investment submission ensures document validity.
+</p>
+</div>
+
+          <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center mb-4">
+              <Award className="w-6 h-6 text-yellow-600" />
+</div>
+            <h3 className="font-bold text-gray-900 mb-2">NFT Tokenization</h3>
+            <p className="text-sm text-gray-600">
+              Verified invoices become tradeable NFTs with embedded verification data.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Protocol Information */}
+      <div className="mt-8 p-6 bg-gradient-to-r from-gray-900 to-blue-900 rounded-2xl text-white">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold">YieldX Protocol - Correct Workflow</h3>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-sm">Live on Sepolia</span>
+            </div>
+            <div className="text-sm bg-blue-800 px-3 py-1 rounded-full">
+              {workflowState.replace('_', ' ').toUpperCase()}
+            </div>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+          <div>
+            <h4 className="font-medium mb-3 text-blue-300">🔄 Correct Workflow</h4>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-blue-500 rounded-full text-xs flex items-center justify-center font-bold">1</div>
+                <span>Fill form with invoice details</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-blue-500 rounded-full text-xs flex items-center justify-center font-bold">2</div>
+                <span>Upload required documents</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-green-500 rounded-full text-xs flex items-center justify-center font-bold">3</div>
+                <span>Chainlink verification with form data</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-purple-500 rounded-full text-xs flex items-center justify-center font-bold">4</div>
+                <span>Submit for investment (only if verified)</span>
+              </div>
+            </div>
+          </div>
+          
+          <div>
+            <h4 className="font-medium mb-3 text-blue-300">📋 Contract Addresses</h4>
+            <div className="space-y-2">
+              <div>
+                <div className="font-medium mb-1">Verification Contract:</div>
+                <a 
+                  href="https://sepolia.etherscan.io/address/0x7f383fae6dC35B877fFe4a97489208778b5e01b4"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-300 hover:text-blue-100 underline text-xs"
+                >
+                  0x7f383fae...01b4
+                </a>
+              </div>
+              <div>
+                <div className="font-medium mb-1">Protocol Core:</div>
+                <a 
+                  href="https://sepolia.etherscan.io/address/0xf0Ff18197A466FA61BC614685D5D699B106e8cdd"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-300 hover:text-blue-100 underline text-xs"
+                >
+                  0xf0Ff1819...8cdd
+                </a>
+              </div>
+              <div className="text-green-300 text-xs mt-2">
+                ✅ All systems operational
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Connection Prompt */}
+      {!isConnected && (
+        <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-xl p-6">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-yellow-600" />
+            <div>
+              <h3 className="font-medium text-yellow-900">Wallet Connection Required</h3>
+              <p className="text-sm text-yellow-800 mt-1">
+                Please connect your wallet to submit invoices and use the YieldX verification system.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+</div>
+);
 }
 
 export default SubmitInvoice;

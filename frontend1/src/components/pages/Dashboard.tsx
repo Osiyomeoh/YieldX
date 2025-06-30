@@ -155,13 +155,10 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
     liveMarketData,        // Live Chainlink oracle data
     usdcBalance,           // Real USDC balance from contract
     refreshBalance,
-    stats,                 // Real protocol stats from contract
+    protocolStats,         // Real protocol stats from contract
     loading,
     mintTestUSDC,
-    txHash,
-    isTransactionSuccess,
     contracts,             // Your live contract addresses
-    writeError,
     getInvoiceDetails,
     getVerificationData,   // New: Get verification data from your proven module
     getInvestmentInfo,
@@ -169,6 +166,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
     getFunctionsConfig,    // New: Get Functions configuration
     getLastFunctionsResponse, // New: Get latest Functions response
     testDirectRequest,     // New: Test Functions integration
+    startDocumentVerification, // New: Start document verification
     updateLivePrices,
   } = useYieldX();
 
@@ -195,7 +193,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
         setFunctionsConfig(config);
         setLastFunctionsResponse(response);
         
-        if (response && response.responseLength > 0) {
+        if (response && response.responseLength && response.responseLength > 0) {
           addNotification('info', 'Functions Data Loaded', 
             `Last response: ${response.responseLength} bytes from subscription 4996`);
         }
@@ -209,15 +207,6 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
     }
   }, [isConnected, getFunctionsConfig, getLastFunctionsResponse, addNotification]);
 
-  // Real protocol stats from your live contract
-  const protocolStats = useMemo(() => ({
-    totalVolume: stats?.totalFundsRaised || 0,
-    totalInvoices: stats?.totalInvoices || 0,
-    pendingInvoices: stats?.pendingInvoices || 0,
-    verifiedInvoices: stats?.verifiedInvoices || 0,
-    fundedInvoices: stats?.fundedInvoices || 0
-  }), [stats]);
-
   const investmentMetrics = useMemo(() => {
     const activeInvestments = investments.filter(inv => inv.status === 'active');
     const completedInvestments = investments.filter(inv => inv.status === 'completed');
@@ -229,30 +218,6 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
       totalReturn
     };
   }, [investments, totalInvested, portfolioValue]);
-
-  // Enhanced transaction handling
-  useEffect(() => {
-    if (txHash) {
-      addNotification('pending', 'Transaction Submitted', 
-        'Your transaction is being processed on Sepolia testnet...', txHash, false);
-    }
-  }, [txHash, addNotification]);
-
-  useEffect(() => {
-    if (isTransactionSuccess && txHash) {
-      addNotification('success', 'Transaction Confirmed!', 
-        'Your transaction has been successfully confirmed on Sepolia.', txHash);
-    }
-  }, [isTransactionSuccess, txHash, addNotification]);
-
-  useEffect(() => {
-    if (writeError) {
-      const errorMessage = writeError.shortMessage || 
-                          writeError.message || 
-                          'An unknown error occurred during the transaction';
-      addNotification('error', 'Transaction Failed', errorMessage, undefined, false);
-    }
-  }, [writeError, addNotification]);
 
   // Enhanced event handlers
   const handleMintUSDC = useCallback(async () => {
@@ -312,7 +277,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
       
       if (result.success) {
         addNotification('success', 'Functions Test Sent!', 
-          'Check subscription 4996 for response (may take 1-2 minutes)', result.hash);
+          'Check subscription 4996 for response (may take 1-2 minutes)', result.txHash);
         
         // Refresh Functions data after a delay
         setTimeout(async () => {
@@ -631,10 +596,10 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             </div>
           </div>
           <p className="text-3xl font-bold text-gray-900">
-            ${protocolStats.totalVolume.toLocaleString()}
+            ${protocolStats?.totalFundsRaised?.toLocaleString?.() || '0'}
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            From {protocolStats.totalInvoices} live invoices
+            From {protocolStats?.totalInvoices || 0} live invoices
           </p>
         </div>
 
@@ -648,7 +613,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
               <p className="text-xs text-orange-600">Contract state</p>
             </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{protocolStats.pendingInvoices}</p>
+          <p className="text-3xl font-bold text-gray-900">{protocolStats?.pendingInvoices || 0}</p>
           <p className="text-sm text-gray-500 mt-1">Awaiting verification</p>
         </div>
         
@@ -662,7 +627,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
               <p className="text-xs text-purple-600">Chainlink verified</p>
             </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{protocolStats.verifiedInvoices}</p>
+          <p className="text-3xl font-bold text-gray-900">{protocolStats?.verifiedInvoices || 0}</p>
           <p className="text-sm text-gray-500 mt-1">Ready for investment</p>
         </div>
         
@@ -676,7 +641,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
               <p className="text-xs text-gray-500">Live balance</p>
             </div>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{(usdcBalance || 0).toFixed(2)}</p>
+          <p className="text-3xl font-bold text-gray-900">{(Number(usdcBalance) || 0).toFixed(2)}</p>
           <button
             onClick={handleRefreshBalance}
             disabled={isRefreshing || loading}
@@ -774,7 +739,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
           <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">USDC Balance Management</h3>
             <div className="text-center mb-6">
-              <p className="text-4xl font-bold text-blue-600 mb-2">{(usdcBalance || 0).toFixed(2)}</p>
+              <p className="text-4xl font-bold text-blue-600 mb-2">{(Number(usdcBalance) || 0).toFixed(2)}</p>
               <p className="text-gray-600">USDC Available (Live from Contract)</p>
             </div>
             
@@ -823,12 +788,12 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
               <div className="bg-white border border-gray-200 rounded-lg p-3">
                 <p className="text-sm text-gray-600 mb-1">Mock USDC Token</p>
                 <a
-                  href={`https://sepolia.etherscan.io/address/${contracts?.MOCK_USDC}`}
+                  href={`https://sepolia.etherscan.io/address/${contracts?.USDC}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-xs text-blue-600 hover:underline flex items-center gap-1"
                 >
-                  {contracts?.MOCK_USDC?.slice(0, 20)}...
+                  {contracts?.USDC?.slice(0, 20)}...
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
@@ -1085,16 +1050,16 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             </div>
             <div className="flex items-center gap-2 mb-2">
               <code className="font-mono text-xs text-orange-700 break-all flex-1">
-                {contracts?.MOCK_USDC}
+                {contracts?.USDC}
               </code>
               <button
-                onClick={() => navigator.clipboard.writeText(contracts?.MOCK_USDC || '')}
+                onClick={() => navigator.clipboard.writeText(contracts?.USDC || '')}
                 className="text-orange-600 hover:text-orange-800"
               >
                 <Copy className="w-3 h-3" />
               </button>
               <a
-                href={`https://sepolia.etherscan.io/address/${contracts?.MOCK_USDC}`}
+                href={`https://sepolia.etherscan.io/address/${contracts?.USDC}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-orange-600 hover:text-orange-800"
@@ -1209,7 +1174,7 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
             <div>
               <p className="text-green-400 mb-1">Contract Addresses:</p>
               <p className="text-xs">Protocol: {contracts?.PROTOCOL || 'Not loaded'}</p>
-              <p className="text-xs">USDC: {contracts?.MOCK_USDC || 'Not loaded'}</p>
+              <p className="text-xs">USDC: {contracts?.USDC || 'Not loaded'}</p>
             </div>
             <div>
               <p className="text-green-400 mb-1">Live Data:</p>

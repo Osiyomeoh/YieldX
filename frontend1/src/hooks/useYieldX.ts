@@ -1,81 +1,179 @@
-// src/hooks/useYieldX.ts - Updated with COMPLETE CHAINLINK FUNCTIONS INTEGRATION
+// hooks/useYieldX.ts - Complete YieldXCore Integration with Imported ABIs
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt, usePublicClient, useWalletClient } from 'wagmi';
-import { parseUnits, formatUnits, getAddress } from 'viem';
-import { MarketData, SubmitInvoiceForm, TransactionResult } from '../types';
+import { parseUnits, formatUnits, Address } from 'viem';
 
-// Import your deployed ABIs
-import YieldXCoreArtifact from '../abis/YieldXCore.json';
-import MockUSDCArtifact from '../abis/MockUSDC.json';
-import YieldXInvoiceNFTArtifact from '../abis/YieldXInvoiceNFT.json';
-import YieldXPriceManagerArtifact from '../abis/YieldXPriceManager.json';
-import YieldXRiskCalculatorArtifact from '../abis/YieldXRiskCalculator.json';
-import ChainlinkFallbackContractArtifact from '../abis/ChainlinkFallbackContract.json';
+// Import ABIs from your files
+import YieldXCore from '../abis/YieldXCore.json';
+import YieldXPriceManager from '../abis/YieldXPriceManager.json';
+import YieldXInvestmentModule from '../abis/YieldXInvestmentModule.json';
+import YieldXInvoiceNFT from '../abis/YieldXInvoiceNFT.json';
+import YieldXRiskCalculator from '../abis/YieldXRiskCalculator.json';
+import YieldXVRFModule from '../abis/YieldXVRFModule.json';
 
-// ✅ YOUR LATEST LIVE SEPOLIA DEPLOYMENT ADDRESSES (From your championship deployment)
-const CONTRACTS = {
-  PROTOCOL: getAddress("0x4A170730617Cf170C3fdddFcb118dC7Ee7beb393"),      // ✅ Live YieldXCore
-  MOCK_USDC: getAddress("0xa76985C4a441c8B5848e40Ec2e183B621dFa6450"),     // ✅ Live MockUSDC
-  INVOICE_NFT: getAddress("0x23aE19Ac3fF12B94EC8f86d3c242C63eB29ed8d9"),   // ✅ Live YieldXInvoiceNFT
-  PRICE_MANAGER: getAddress("0x4975e18b10DC06aE4988671149a3Dc961658AC24"), // ✅ Live YieldXPriceManager
-  RISK_CALCULATOR: getAddress("0x20CBC8481C4B5DA39163D8D8575b251596eaA7C6"), // ✅ Live YieldXRiskCalculator
-  FALLBACK_CONTRACT: getAddress("0xEEc38283E67aA06aC2C05c5F9B8A5F092559026f"), // ✅ Live ChainlinkFallbackContract
-  INVESTMENT_MODULE: getAddress("0x05466c3c8E44aFe2E0ae901f3Aec69911a213ab3"), // ✅ Live YieldXInvestmentModule
-  VRF_MODULE: getAddress("0x0E12fCabC62C3Fdef67549ebCb7a7226624e4b33"),     // ✅ Live YieldXVRFModule
-  VERIFICATION_MODULE: getAddress("0x148f9528267E08A52EEa06A90e645d2D0Bd5e447"), // ✅ Your Proven Working Verification
-} as const;
+const YieldXCoreABI = YieldXCore.abi;
+const YieldXPriceManagerABI = YieldXPriceManager.abi;
+const YieldXInvestmentModuleABI = YieldXInvestmentModule.abi;
+const YieldXInvoiceNFTABI = YieldXInvoiceNFT.abi;
+const YieldXRiskCalculatorABI = YieldXRiskCalculator.abi;
+const YieldXVRFModuleABI = YieldXVRFModule.abi;
 
-console.log('🚀 USING YOUR CHAMPIONSHIP LIVE SEPOLIA DEPLOYMENT:', {
-  PROTOCOL: CONTRACTS.PROTOCOL,
-  MOCK_USDC: CONTRACTS.MOCK_USDC,
-  INVOICE_NFT: CONTRACTS.INVOICE_NFT,
-  PRICE_MANAGER: CONTRACTS.PRICE_MANAGER,
-  RISK_CALCULATOR: CONTRACTS.RISK_CALCULATOR,
-  INVESTMENT_MODULE: CONTRACTS.INVESTMENT_MODULE,
-  VRF_MODULE: CONTRACTS.VRF_MODULE,
-  VERIFICATION_MODULE: CONTRACTS.VERIFICATION_MODULE,
-});
+// Inline ABI for MockUSDC
+const MockUSDCABI = [
+  {
+    "inputs": [
+      { "internalType": "address", "name": "to", "type": "address" },
+      { "internalType": "uint256", "name": "amount", "type": "uint256" }
+    ],
+    "name": "mint",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "owner", "type": "address" }
+    ],
+    "name": "balanceOf",
+    "outputs": [
+      { "internalType": "uint256", "name": "", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "owner", "type": "address" },
+      { "internalType": "address", "name": "spender", "type": "address" }
+    ],
+    "name": "allowance",
+    "outputs": [
+      { "internalType": "uint256", "name": "", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "spender", "type": "address" },
+      { "internalType": "uint256", "name": "amount", "type": "uint256" }
+    ],
+    "name": "approve",
+    "outputs": [
+      { "internalType": "bool", "name": "", "type": "bool" }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+];
 
-// Extract ABIs from your actual artifacts
-const YieldXCoreABI = YieldXCoreArtifact.abi;
-const MockUSDCABI = MockUSDCArtifact.abi;
-const YieldXInvoiceNFTABI = YieldXInvoiceNFTArtifact.abi;
-const YieldXPriceManagerABI = YieldXPriceManagerArtifact.abi;
-const YieldXRiskCalculatorABI = YieldXRiskCalculatorArtifact.abi;
-const ChainlinkFallbackContractABI = ChainlinkFallbackContractArtifact.abi;
+// Contract addresses from your deployment
+const CONTRACT_ADDRESSES = {
+  USDC: "0x29Aa0e79a83304b59f6b670EBc1Ca515542e3a45" as Address,
+  INVOICE_NFT: "0x5d89fC0D93f97e41cF377D72036ABDEa42Eef9e3" as Address,
+  PRICE_MANAGER: "0x3657FbcC37009B1bc1Ea281D8D4F814b520680B5" as Address,
+  RISK_CALCULATOR: "0xD5Daf6C5659a65bBC59Ba35D2E7d8385f9ef496e" as Address,
+  INVESTMENT_MODULE: "0x15F69a1e4286438bf2998ca5CE0f8213076a4328" as Address,
+  VRF_MODULE: "0x2cF96785b23A35ed6a16F0D0EbA378b46bC3eaF2" as Address,
+  PROTOCOL: "0x1a4906Ea468F61c7A0352287116942A1b982f99C" as Address, // YieldXCore
+  VERIFICATION_MODULE: "0xDb0128B2680935DA2daab9D8dF3D9Eb5C523476d" as Address
+};
 
-// 🆕 Chainlink Functions Verification Module Interface (since it's not compiled in Hardhat)
-const VERIFICATION_MODULE_ABI = [
-  "function getFunctionsConfig() external view returns (address router, uint64 subscriptionId, uint32 gasLimitConfig, bytes32 donIdConfig)",
-  "function getLastFunctionsResponse() external view returns (bytes32 lastRequestId, bytes lastResponse, bytes lastError, uint256 responseLength)",
-  "function getDocumentVerification(uint256 invoiceId) external view returns (bool verified, bool valid, string memory details, uint256 risk, string memory rating, uint256 timestamp)",
-  "function testDirectRequest() external returns (bytes32)",
-  "function startDocumentVerification(uint256 invoiceId) external returns (bytes32 requestId)",
-  "function fulfillRequest(bytes32 requestId, bytes memory response, bytes memory err) external",
-  "function coreContract() external view returns (address)",
-  "function setCoreContract(address _coreContract) external"
+// YieldX Verification ABI - Since you don't have this file, keep the manual one
+const YIELDX_VERIFICATION_ABI = [
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "invoiceId", "type": "uint256"}
+    ],
+    "name": "getDocumentVerification",
+    "outputs": [
+      {"internalType": "bool", "name": "verified", "type": "bool"},
+      {"internalType": "bool", "name": "valid", "type": "bool"},
+      {"internalType": "string", "name": "details", "type": "string"},
+      {"internalType": "uint256", "name": "risk", "type": "uint256"},
+      {"internalType": "string", "name": "rating", "type": "string"},
+      {"internalType": "uint256", "name": "timestamp", "type": "uint256"}
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getLastFunctionsResponse",
+    "outputs": [
+      {"internalType": "bytes32", "name": "lastRequestId", "type": "bytes32"},
+      {"internalType": "bytes", "name": "lastResponse", "type": "bytes"},
+      {"internalType": "bytes", "name": "lastError", "type": "bytes"}
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getLastResponseDecoded",
+    "outputs": [
+      {"internalType": "string", "name": "", "type": "string"}
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "invoiceId", "type": "uint256"},
+      {"internalType": "string", "name": "documentHash", "type": "string"},
+      {"internalType": "string", "name": "commodity", "type": "string"},
+      {"internalType": "uint256", "name": "amount", "type": "uint256"},
+      {"internalType": "string", "name": "supplierCountry", "type": "string"},
+      {"internalType": "string", "name": "buyerCountry", "type": "string"},
+      {"internalType": "string", "name": "exporterName", "type": "string"},
+      {"internalType": "string", "name": "buyerName", "type": "string"}
+    ],
+    "name": "startDocumentVerification",
+    "outputs": [
+      {"internalType": "bytes32", "name": "", "type": "bytes32"}
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "testDirectRequest",
+    "outputs": [
+      {"internalType": "bytes32", "name": "", "type": "bytes32"}
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ownerTestRequest",
+    "outputs": [
+      {"internalType": "bytes32", "name": "", "type": "bytes32"}
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
 ] as const;
 
-// Enhanced types for your championship protocol
-export interface InvoiceDetails {
-  id: number;
-  supplier: string;
-  buyer: string;
-  amount: number;
-  commodity: string;
-  supplierCountry: string;
-  buyerCountry: string;
-  exporterName: string;
-  buyerName: string;
-  dueDate: number;
-  aprBasisPoints: number;
-  status: number; // 0=Submitted, 1=Verifying, 2=Verified, 3=FullyFunded, 4=Approved, 5=Funded, 6=Repaid, 7=Defaulted, 8=Rejected
-  documentVerified: boolean;
-  targetFunding: number;
-  currentFunding: number;
+// Types
+interface VerificationData {
+  verified: boolean;
+  valid: boolean;
+  details: string;
+  risk: number;
+  rating: string;
+  timestamp: number;
 }
 
-export interface LivePriceData {
+interface ProtocolStats {
+  totalInvoices: number;
+  totalFundsRaised: number;
+  pendingInvoices: number;
+  verifiedInvoices: number;
+  fundedInvoices: number;
+}
+
+interface LiveMarketData {
   ethPrice: number;
   usdcPrice: number;
   btcPrice: number;
@@ -85,955 +183,771 @@ export interface LivePriceData {
   initialPricesFetched: boolean;
 }
 
-export interface ProtocolStats {
-  totalInvoices: number;
-  totalFundsRaised: number;
-  pendingInvoices: number;
-  verifiedInvoices: number;
-  fundedInvoices: number;
-}
-
-export interface InvestmentInfo {
-  totalInvestment: number;
-  numInvestors: number;
-  investors: string[];
-}
-
-export interface VerificationData {
-  verified: boolean;
-  valid: boolean;
-  details: string;
-  riskScore: number;
-  creditRating: string;
-  timestamp: number;
-}
-
-// 🆕 Enhanced Functions interfaces
-export interface FunctionsConfig {
-  router: string;
-  subscriptionId: number;
-  gasLimit: number;
-  donId: string;
-}
-
-export interface FunctionsResponse {
-  lastRequestId: string;
-  lastResponse: string;
-  lastError: string;
-  responseLength: number;
-}
-
-export function useYieldX() {
-  const { address, isConnected, chain } = useAccount();
-  const { writeContractAsync, isPending: isWritePending, error: writeError } = useWriteContract();
-  const publicClient = usePublicClient();
+export const useYieldX = () => {
+  const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
   
-  const [loading, setLoading] = useState(false);
-  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
-  const [forceRefreshCounter, setForceRefreshCounter] = useState(0);
-
-  // Read USDC balance
-  const { 
-    data: rawUsdcBalance, 
-    error: balanceError, 
-    refetch: refetchBalance,
-    isLoading: isBalanceLoading 
-  } = useReadContract({
-    address: CONTRACTS.MOCK_USDC,
-    abi: MockUSDCABI,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    query: {
-      staleTime: 0,
-      gcTime: 0,
-      refetchInterval: 3000,
-      refetchIntervalInBackground: true,
-      refetchOnMount: true,
-      refetchOnReconnect: true,
-      refetchOnWindowFocus: true,
-    }
-  });
-
-  // Read protocol stats using stack-safe functions
-  const { data: protocolStats, refetch: refetchProtocolStats } = useReadContract({
-    address: CONTRACTS.PROTOCOL,
+  // State
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Contract writes
+  const { writeContract: writeYieldXCore } = useWriteContract();
+  const { writeContract: writeUSDC } = useWriteContract();
+  const { writeContract: writeVerification } = useWriteContract();
+  const { writeContract: writePriceManager } = useWriteContract();
+  
+  // ============ PROTOCOL STATS ============
+  
+  // Protocol Stats
+  const { data: protocolStats } = useReadContract({
+    address: CONTRACT_ADDRESSES.PROTOCOL,
     abi: YieldXCoreABI,
     functionName: 'getProtocolStats',
   });
-
-  // Get live price data from your PriceManager
-  const { data: livePrices, refetch: refetchPrices } = useReadContract({
-    address: CONTRACTS.PRICE_MANAGER,
+  
+  // Invoice counter
+  const { data: invoiceCounter } = useReadContract({
+    address: CONTRACT_ADDRESSES.PROTOCOL,
+    abi: YieldXCoreABI,
+    functionName: 'invoiceCounter',
+  });
+  
+  // ============ LIVE MARKET DATA ============
+  
+  // Live market prices
+  const { data: priceData } = useReadContract({
+    address: CONTRACT_ADDRESSES.PRICE_MANAGER,
     abi: YieldXPriceManagerABI,
     functionName: 'getLatestPrices',
+    query: { refetchInterval: 30000 }
   });
-
-  // Get market volatility
-  const { data: marketVolatility } = useReadContract({
-    address: CONTRACTS.PRICE_MANAGER,
+  
+  // Market volatility
+  const { data: volatilityData } = useReadContract({
+    address: CONTRACT_ADDRESSES.PRICE_MANAGER,
     abi: YieldXPriceManagerABI,
     functionName: 'calculateMarketVolatility',
+    query: { refetchInterval: 60000 }
   });
-
-  // Check if initial prices were fetched from Chainlink
+  
+  // Initial prices fetched status
   const { data: initialPricesFetched } = useReadContract({
-    address: CONTRACTS.PRICE_MANAGER,
+    address: CONTRACT_ADDRESSES.PRICE_MANAGER,
     abi: YieldXPriceManagerABI,
     functionName: 'initialPricesFetched',
   });
-
-  // Wait for transaction
-  const { 
-    isLoading: isTransactionLoading, 
-    isSuccess: isTransactionSuccess,
-    data: transactionReceipt 
-  } = useWaitForTransactionReceipt({
-    hash: txHash,
+  
+  // ============ USDC DATA ============
+  
+  // Get USDC balance
+  const { data: usdcBalance } = useReadContract({
+    address: CONTRACT_ADDRESSES.USDC,
+    abi: MockUSDCABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
   });
-
-  // Refresh when transaction succeeds
-  useEffect(() => {
-    if (isTransactionSuccess && transactionReceipt) {
-      console.log('🎉 Transaction confirmed! Refreshing data...');
-      
-      const refreshAttempts = [500, 1000, 2000, 3000, 5000];
-      
-      refreshAttempts.forEach((delay, index) => {
-        setTimeout(async () => {
-          console.log(`🔄 Refresh attempt ${index + 1}/${refreshAttempts.length}`);
-          await refetchBalance();
-          await refetchProtocolStats();
-          await refetchPrices();
-          setForceRefreshCounter(prev => prev + 1);
-        }, delay);
-      });
-    }
-  }, [isTransactionSuccess, transactionReceipt, refetchBalance, refetchProtocolStats, refetchPrices]);
-
-  // Manual refresh
-  const refreshBalance = useCallback(async () => {
-    console.log('🔄 Manual balance refresh:', CONTRACTS.MOCK_USDC);
-    setForceRefreshCounter(prev => prev + 1);
-    
+  
+  // ============ VERIFICATION READ FUNCTIONS ============
+  
+  // Get verification data for specific invoice - THIS IS THE KEY FIX
+  const getVerificationData = useCallback(async (invoiceId: string) => {
     try {
-      const result = await refetchBalance();
-      console.log('✅ Refresh result:', result.data?.toString());
-      return result;
-    } catch (error) {
-      console.error('❌ Refresh failed:', error);
-      throw error;
-    }
-  }, [refetchBalance]);
-
-  // Get formatted balance
-  const usdcBalance = rawUsdcBalance ? formatUnits(rawUsdcBalance as bigint, 6) : '0';
-
-  // Format live price data from your contracts
-  const liveMarketData: LivePriceData = {
-    ethPrice: livePrices ? Number(livePrices[0]) / 1e8 : 3200,
-    usdcPrice: livePrices ? Number(livePrices[1]) / 1e8 : 1.0,
-    btcPrice: livePrices ? Number(livePrices[2]) / 1e8 : 65000,
-    linkPrice: livePrices ? Number(livePrices[3]) / 1e8 : 25,
-    lastUpdate: livePrices ? Number(livePrices[4]) : Date.now() / 1000,
-    marketVolatility: marketVolatility ? Number(marketVolatility) / 100 : 0.5,
-    initialPricesFetched: Boolean(initialPricesFetched),
-  };
-
-  // Format protocol statistics using your stack-safe functions
-  const stats: ProtocolStats = protocolStats ? {
-    totalInvoices: Number(protocolStats[0]),
-    totalFundsRaised: Number(formatUnits(protocolStats[1] as bigint, 6)),
-    pendingInvoices: Number(protocolStats[2]),
-    verifiedInvoices: Number(protocolStats[3]),
-    fundedInvoices: Number(protocolStats[4]),
-  } : {
-    totalInvoices: 0,
-    totalFundsRaised: 0,
-    pendingInvoices: 0,
-    verifiedInvoices: 0,
-    fundedInvoices: 0,
-  };
-
-  // ==================== CHAINLINK FUNCTIONS INTEGRATION ====================
-
-  // 🆕 Get Functions Configuration from your proven verification module
-  const getFunctionsConfig = useCallback(async (): Promise<FunctionsConfig | null> => {
-    if (!publicClient || !isConnected) return null;
-
-    try {
-      console.log('📋 Reading Functions configuration from proven verification module...');
+      console.log(`🔍 Getting verification data for invoice ${invoiceId}`);
       
-      const result = await publicClient.readContract({
-        address: CONTRACTS.VERIFICATION_MODULE,
-        abi: VERIFICATION_MODULE_ABI,
-        functionName: 'getFunctionsConfig',
-      });
-      
-      if (result && Array.isArray(result)) {
-        const config = {
-          router: result[0] as string,
-          subscriptionId: Number(result[1]),
-          gasLimit: Number(result[2]),
-          donId: result[3] as string,
-        };
-        
-        console.log('✅ Functions config loaded:', config);
-        return config;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('❌ Error reading Functions config:', error);
-      return null;
-    }
-  }, [publicClient, isConnected]);
-
-  // 🆕 Get Last Functions Response from your proven verification module  
-  const getLastFunctionsResponse = useCallback(async (): Promise<FunctionsResponse | null> => {
-    if (!publicClient || !isConnected) return null;
-
-    try {
-      console.log('📡 Reading last Functions response from proven verification module...');
-      
-      const result = await publicClient.readContract({
-        address: CONTRACTS.VERIFICATION_MODULE,
-        abi: VERIFICATION_MODULE_ABI,
-        functionName: 'getLastFunctionsResponse',
-      });
-      
-      if (result && Array.isArray(result)) {
-        const response = {
-          lastRequestId: result[0] as string,
-          lastResponse: result[1] as string,
-          lastError: result[2] as string,
-          responseLength: Number(result[3]),
-        };
-        
-        console.log('✅ Last Functions response:', {
-          requestId: response.lastRequestId.substring(0, 10) + '...',
-          responseLength: response.responseLength,
-          hasError: response.lastError !== '0x'
-        });
-        
-        return response;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('❌ Error reading last Functions response:', error);
-      return null;
-    }
-  }, [publicClient, isConnected]);
-
-  // 🆕 Start Document Verification using Chainlink Functions
-  const startDocumentVerification = useCallback(async (invoiceId: number): Promise<TransactionResult> => {
-    console.log(`🔍 Starting Chainlink Functions verification for invoice ${invoiceId}...`);
-    
-    if (!isConnected || !address) {
-      return { hash: '', success: false, error: 'Wallet not connected' };
-    }
-
-    setLoading(true);
-    try {
-      console.log('🚀 Calling startDocumentVerification on proven verification module...');
-      
-      const hash = await writeContractAsync({
-        address: CONTRACTS.VERIFICATION_MODULE,
-        abi: VERIFICATION_MODULE_ABI,
-        functionName: 'startDocumentVerification',
-        args: [BigInt(invoiceId)],
-        gas: BigInt(500000), // Higher gas for Functions calls
-      });
-
-      console.log('✅ Document verification request submitted:', hash);
-      setTxHash(hash);
-      
-      // Wait for transaction receipt
-      setTimeout(async () => {
-        try {
-          console.log('📡 Checking for Functions response...');
-          const response = await getLastFunctionsResponse();
-          if (response && response.responseLength > 0) {
-            console.log(`✅ Functions response received: ${response.responseLength} bytes`);
-          }
-        } catch (error) {
-          console.log('⏳ Functions response not yet available');
-        }
-      }, 10000); // Check after 10 seconds
-      
-      return { hash, success: true };
-    } catch (error: any) {
-      console.error('❌ Document verification failed:', error);
-      
-      let errorMessage = 'Document verification failed';
-      if (error.message?.includes('rate')) {
-        errorMessage = 'Functions rate limited - your integration is working correctly!';
-      } else if (error.message?.includes('subscription')) {
-        errorMessage = 'Subscription 4996 issue - check Functions dashboard';
-      } else if (error.message?.includes('user rejected')) {
-        errorMessage = 'Transaction cancelled by user';
-      } else if (error.shortMessage) {
-        errorMessage = error.shortMessage;
-      }
-
-      return {
-        hash: '',
-        success: false,
-        error: errorMessage,
-      };
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, address, writeContractAsync, getLastFunctionsResponse]);
-
-  // 🆕 Enhanced Test Direct Request function
-  const testDirectRequest = useCallback(async (): Promise<TransactionResult> => {
-    console.log('🧪 Testing direct Functions request on proven verification module...');
-    
-    if (!isConnected || !address) {
-      return { hash: '', success: false, error: 'Wallet not connected' };
-    }
-
-    setLoading(true);
-    try {
-      console.log('🚀 Calling testDirectRequest on your proven verification module...');
-      
-      const hash = await writeContractAsync({
-        address: CONTRACTS.VERIFICATION_MODULE,
-        abi: VERIFICATION_MODULE_ABI,
-        functionName: 'testDirectRequest',
-        args: [],
-        gas: BigInt(500000), // Higher gas for Functions calls
-      });
-
-      console.log('✅ Test Functions request submitted:', hash);
-      setTxHash(hash);
-      
-      // Check for response after a delay
-      setTimeout(async () => {
-        try {
-          const response = await getLastFunctionsResponse();
-          if (response && response.responseLength > 0) {
-            console.log(`✅ Functions test response: ${response.responseLength} bytes`);
-          }
-        } catch (error) {
-          console.log('⏳ Functions response not yet available');
-        }
-      }, 8000);
-      
-      return { 
-        hash, 
-        success: true,
-        // Include known response length from your proven module
-        responseLength: 216 
-      };
-    } catch (error: any) {
-      console.error('❌ Test Functions request failed:', error);
-      
-      let errorMessage = 'Functions test failed';
-      if (error.message?.includes('rate')) {
-        errorMessage = 'Functions rate limited - your integration is working correctly!';
-      } else if (error.message?.includes('subscription')) {
-        errorMessage = 'Subscription 4996 issue - check Functions configuration';
-      } else if (error.message?.includes('user rejected')) {
-        errorMessage = 'Transaction cancelled by user';
-      } else if (error.shortMessage) {
-        errorMessage = error.shortMessage;
-      }
-      
-      return {
-        hash: '',
-        success: false,
-        error: errorMessage,
-      };
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, address, writeContractAsync, getLastFunctionsResponse]);
-
-  // 🆕 Enhanced Get Verification Data with better error handling
-  const getVerificationData = useCallback(async (invoiceId: number): Promise<VerificationData | null> => {
-    if (!publicClient || !isConnected) return null;
-
-    try {
-      console.log(`📋 Reading verification data for invoice ${invoiceId} from proven verification module...`);
-      
-      const result = await publicClient.readContract({
-        address: CONTRACTS.VERIFICATION_MODULE,
-        abi: VERIFICATION_MODULE_ABI,
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.VERIFICATION_MODULE,
+        abi: YIELDX_VERIFICATION_ABI,
         functionName: 'getDocumentVerification',
         args: [BigInt(invoiceId)],
-      });
+      }) as [boolean, boolean, string, bigint, string, bigint] | undefined;
       
-      if (result && Array.isArray(result)) {
-        const verificationData = {
-          verified: Boolean(result[0]),
-          valid: Boolean(result[1]),
-          details: result[2] as string,
-          riskScore: Number(result[3]),
-          creditRating: result[4] as string,
-          timestamp: Number(result[5]),
-        };
-
-        console.log(`✅ Verification data for invoice ${invoiceId}:`, {
-          verified: verificationData.verified,
-          valid: verificationData.valid,
-          riskScore: verificationData.riskScore,
-          creditRating: verificationData.creditRating,
-        });
-        
-        return verificationData;
+      if (!result) {
+        console.log('❌ No verification data found');
+        return null;
       }
       
-      return null;
+      const [verified, valid, details, risk, rating, timestamp] = result;
+      
+      const verificationData = {
+        verified,
+        valid,
+        details,
+        risk: Number(risk),
+        rating,
+        timestamp: Number(timestamp),
+      };
+      
+      console.log(`✅ Verification data for invoice ${invoiceId}:`, verificationData);
+      return verificationData;
+      
     } catch (error) {
-      console.error(`❌ Error reading verification data for invoice ${invoiceId}:`, error);
+      console.error('❌ Error getting verification data:', error);
       return null;
     }
-  }, [publicClient, isConnected]);
-
-  // ==================== EXISTING FUNCTIONS (Enhanced) ====================
-
-  // Mint test USDC
-  const mintTestUSDC = useCallback(async (amount: string = '10000'): Promise<TransactionResult> => {
-    console.log('🪙 Minting USDC:', CONTRACTS.MOCK_USDC);
-    
-    if (!isConnected || !address) {
-      return { hash: '', success: false, error: 'Wallet not connected' };
-    }
-
-    setLoading(true);
+  }, [publicClient]);
+  
+  // Get last Functions response (global - for debugging only)
+  const getLastFunctionsResponse = useCallback(async () => {
     try {
-      const amountWei = parseUnits(amount, 6);
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.VERIFICATION_MODULE,
+        abi: YIELDX_VERIFICATION_ABI,
+        functionName: 'getLastFunctionsResponse',
+      }) as [string, string, string] | undefined;
       
-      console.log('🚀 Mint details:', {
-        contractAddress: CONTRACTS.MOCK_USDC,
-        to: address,
-        amount,
-        amountWei: amountWei.toString()
-      });
-
-      const hash = await writeContractAsync({
-        address: CONTRACTS.MOCK_USDC,
-        abi: MockUSDCABI,
-        functionName: 'mint',
-        args: [address, amountWei],
-      });
-
-      console.log('✅ Mint transaction submitted:', hash);
-      setTxHash(hash);
+      if (!result) return null;
       
-      return { hash, success: true };
-    } catch (error: any) {
-      console.error('❌ Mint failed:', error);
-      return {
-        hash: '',
-        success: false,
-        error: error.shortMessage || error.message || 'Minting failed',
-      };
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, address, writeContractAsync]);
-
-  // Approve USDC spending
-  const approveUSDC = useCallback(async (spender: string, amount: string): Promise<TransactionResult> => {
-    if (!isConnected || !address) {
-      return { hash: '', success: false, error: 'Wallet not connected' };
-    }
-
-    setLoading(true);
-    try {
-      const amountWei = parseUnits(amount, 6);
-      const hash = await writeContractAsync({
-        address: CONTRACTS.MOCK_USDC,
-        abi: MockUSDCABI,
-        functionName: 'approve',
-        args: [spender, amountWei],
-      });
-      setTxHash(hash);
-      return { hash, success: true };
-    } catch (error: any) {
-      return {
-        hash: '',
-        success: false,
-        error: error.shortMessage || error.message || 'Approval failed',
-      };
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, address, writeContractAsync]);
-
-  // Submit invoice to your championship protocol
-  const submitInvoice = useCallback(async (formData: SubmitInvoiceForm): Promise<TransactionResult> => {
-    console.log('📄 Submitting invoice to championship protocol:', CONTRACTS.PROTOCOL);
-    
-    if (!isConnected || !address) {
-      return { hash: '', success: false, error: 'Wallet not connected' };
-    }
-
-    // Validate form data
-    if (!formData.commodity || !formData.amount || !formData.exporterName || !formData.buyerName) {
-      return { hash: '', success: false, error: 'Required fields missing' };
-    }
-
-    setLoading(true);
-    try {
-      const amountWei = parseUnits(formData.amount, 6);
-      const dueDate = Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60); // 90 days
-      const documentHash = `0x${Math.random().toString(16).slice(2).padStart(64, '0')}`; // Generate document hash
+      const [lastRequestId, lastResponse, lastError] = result;
       
-      console.log('🚀 Championship invoice submission:', {
-        buyer: address, // Using connected address as buyer for demo
-        amount: formData.amount,
-        commodity: formData.commodity,
-        supplierCountry: formData.originCountry || 'Kenya',
-        buyerCountry: formData.destination || 'USA',
-        exporterName: formData.exporterName,
-        buyerName: formData.buyerName,
-        dueDate,
-        documentHash,
-      });
-
-      const hash = await writeContractAsync({
-        address: CONTRACTS.PROTOCOL,
-        abi: YieldXCoreABI,
-        functionName: 'submitInvoice',
-        args: [
-          address,                                    // buyer (using connected address)
-          amountWei,                                 // amount
-          formData.commodity,                        // commodity
-          formData.originCountry || 'Kenya',         // supplierCountry
-          formData.destination || 'USA',             // buyerCountry
-          formData.exporterName,                     // exporterName
-          formData.buyerName,                        // buyerName
-          BigInt(dueDate),                          // dueDate
-          documentHash,                             // documentHash
-        ],
-        gas: BigInt(1000000), // Higher gas limit for complex operations
-      });
-
-      console.log('✅ Championship invoice submitted:', hash);
-      setTxHash(hash);
-      
-      return { hash, success: true };
-      
-    } catch (error: any) {
-      console.error('❌ Submit failed:', error);
-      
-      let errorMessage = error.shortMessage || error.message || 'Submission failed';
-      
-      if (errorMessage.includes('execution reverted')) {
-        errorMessage = 'Contract execution reverted. Check all requirements are met.';
-      } else if (errorMessage.includes('User rejected')) {
-        errorMessage = 'Transaction was rejected by user';
-      } else if (errorMessage.includes('insufficient funds')) {
-        errorMessage = 'Insufficient ETH for gas fees';
-      }
-      
-      return {
-        hash: '',
-        success: false,
-        error: errorMessage,
-      };
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, address, writeContractAsync]);
-
-  // Invest in invoice
-  const investInInvoice = useCallback(async (invoiceId: number, amount: string): Promise<TransactionResult> => {
-    console.log('💰 Investing in invoice:', invoiceId, 'Amount:', amount);
-    
-    if (!isConnected || !address) {
-      return { hash: '', success: false, error: 'Wallet not connected' };
-    }
-
-    setLoading(true);
-    try {
-      const amountWei = parseUnits(amount, 6);
-      
-      // First approve USDC spending
-      console.log('🔒 Approving USDC spending...');
-      const approveHash = await writeContractAsync({
-        address: CONTRACTS.MOCK_USDC,
-        abi: MockUSDCABI,
-        functionName: 'approve',
-        args: [CONTRACTS.PROTOCOL, amountWei],
-      });
-      
-      // Wait for approval
-      setTxHash(approveHash);
-      
-      // Then invest
-      setTimeout(async () => {
+      // Decode the response
+      let decodedResponse = '';
+      if (lastResponse && lastResponse !== '0x') {
         try {
-          const hash = await writeContractAsync({
-            address: CONTRACTS.PROTOCOL,
-            abi: YieldXCoreABI,
-            functionName: 'investInInvoice',
-            args: [BigInt(invoiceId), amountWei],
-            gas: BigInt(500000),
-          });
-          
-          console.log('✅ Investment submitted:', hash);
-          setTxHash(hash);
-        } catch (error: any) {
-          console.error('❌ Investment failed:', error);
+          decodedResponse = Buffer.from(lastResponse.slice(2), 'hex').toString('utf8');
+        } catch (e) {
+          console.warn('Could not decode response:', e);
         }
-      }, 3000);
-      
-      return { hash: approveHash, success: true };
-      
-    } catch (error: any) {
-      console.error('❌ Investment failed:', error);
-      return {
-        hash: '',
-        success: false,
-        error: error.shortMessage || error.message || 'Investment failed',
-      };
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, address, writeContractAsync]);
-
-  // Get invoice details using stack-safe functions
-  const getInvoiceDetails = useCallback(async (invoiceId: number): Promise<InvoiceDetails | null> => {
-    if (!publicClient) return null;
-
-    try {
-      console.log(`🔍 Fetching invoice details for ID ${invoiceId}`);
-      
-      // Use stack-safe view functions
-      const [basics, parties, locations, financials, metadata] = await Promise.all([
-        publicClient.readContract({
-          address: CONTRACTS.PROTOCOL,
-          abi: YieldXCoreABI,
-          functionName: 'getInvoiceBasics',
-          args: [BigInt(invoiceId)],
-        }),
-        publicClient.readContract({
-          address: CONTRACTS.PROTOCOL,
-          abi: YieldXCoreABI,
-          functionName: 'getInvoiceParties',
-          args: [BigInt(invoiceId)],
-        }),
-        publicClient.readContract({
-          address: CONTRACTS.PROTOCOL,
-          abi: YieldXCoreABI,
-          functionName: 'getInvoiceLocations',
-          args: [BigInt(invoiceId)],
-        }),
-        publicClient.readContract({
-          address: CONTRACTS.PROTOCOL,
-          abi: YieldXCoreABI,
-          functionName: 'getInvoiceMetadata',
-          args: [BigInt(invoiceId)],
-        }),
-      ]);
-      
-      if (basics && parties && locations && financials && metadata) {
-        console.log(`✅ Invoice ${invoiceId} details retrieved`);
-        
-        return {
-          id: Number((basics as any[])[0]),
-          supplier: (basics as any[])[1] as string,
-          amount: Number(formatUnits((basics as any[])[2] as bigint, 6)),
-          status: Number((basics as any[])[3]),
-          buyer: (parties as any[])[0] as string,
-          exporterName: (parties as any[])[1] as string,
-          buyerName: (parties as any[])[2] as string,
-          commodity: (parties as any[])[3] as string,
-          supplierCountry: (locations as any[])[0] as string,
-          buyerCountry: (locations as any[])[1] as string,
-          targetFunding: Number(formatUnits((financials as any[])[0] as bigint, 6)),
-          currentFunding: Number(formatUnits((financials as any[])[1] as bigint, 6)),
-          aprBasisPoints: Number((financials as any[])[2]),
-          dueDate: Number((financials as any[])[3]),
-          documentVerified: Boolean((metadata as any[])[1]),
-        };
       }
       
-      return null;
+      return {
+        lastRequestId,
+        lastResponse,
+        lastError,
+        decodedResponse,
+        responseLength: lastResponse ? (lastResponse.length - 2) / 2 : 0,
+      };
     } catch (error) {
-      console.error(`❌ Error fetching invoice ${invoiceId}:`, error);
+      console.error('Error getting last Functions response:', error);
       return null;
     }
   }, [publicClient]);
-
-  // Get investment info
-  const getInvestmentInfo = useCallback(async (invoiceId: number): Promise<InvestmentInfo | null> => {
-    if (!publicClient) return null;
-
+  
+  // ============ YIELDX CORE READ FUNCTIONS ============
+  
+  // Get investment opportunities
+  const getInvestmentOpportunities = useCallback(async () => {
     try {
-      const result = await publicClient.readContract({
-        address: CONTRACTS.PROTOCOL,
-        abi: YieldXCoreABI,
-        functionName: 'getInvestmentBasics',
-        args: [BigInt(invoiceId)],
-      });
-      
-      if (result && Array.isArray(result)) {
-        const data = result as any[];
-        return {
-          totalInvestment: Number(formatUnits(data[1] as bigint, 6)),
-          numInvestors: Number(data[3]),
-          investors: [], // Would need separate call to get investor list
-        };
-      }
-      
-      return null;
-    } catch (error) {
-      console.error(`❌ Error fetching investment info for invoice ${invoiceId}:`, error);
-      return null;
-    }
-  }, [publicClient]);
-
-  // Update live prices from Chainlink
-  const updateLivePrices = useCallback(async (): Promise<TransactionResult> => {
-    console.log('📊 Updating live prices from Chainlink...');
-    
-    if (!isConnected || !address) {
-      return { hash: '', success: false, error: 'Wallet not connected' };
-    }
-
-    setLoading(true);
-    try {
-      const hash = await writeContractAsync({
-        address: CONTRACTS.PRICE_MANAGER,
-        abi: YieldXPriceManagerABI,
-        functionName: 'updateLivePrices',
-        args: [],
-      });
-
-      console.log('✅ Price update triggered:', hash);
-      setTxHash(hash);
-      
-      return { hash, success: true };
-    } catch (error: any) {
-      console.error('❌ Price update failed:', error);
-      return {
-        hash: '',
-        success: false,
-        error: error.shortMessage || error.message || 'Price update failed',
-      };
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, address, writeContractAsync]);
-
-  // Get investment opportunities (verified invoices)
-  const getInvestmentOpportunities = useCallback(async (): Promise<number[]> => {
-    if (!publicClient) return [];
-
-    try {
-      const result = await publicClient.readContract({
-        address: CONTRACTS.PROTOCOL,
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
         abi: YieldXCoreABI,
         functionName: 'getInvestmentOpportunities',
-      });
+      }) as bigint[] | undefined;
       
-      return (result as bigint[]).map(id => Number(id));
+      return result?.map(id => Number(id)) || [];
     } catch (error) {
-      console.error('❌ Error fetching investment opportunities:', error);
+      console.error('Error getting investment opportunities:', error);
       return [];
     }
   }, [publicClient]);
-
-  // 🆕 Additional Chainlink Functions helper functions
-
-  // Check if verification module is connected to core
-  const checkVerificationConnection = useCallback(async (): Promise<boolean> => {
-    if (!publicClient || !isConnected) return false;
-
+  
+  // Get invoice basics
+  const getInvoiceBasics = useCallback(async (invoiceId: string) => {
     try {
-      const result = await publicClient.readContract({
-        address: CONTRACTS.VERIFICATION_MODULE,
-        abi: VERIFICATION_MODULE_ABI,
-        functionName: 'coreContract',
-      });
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvoiceBasics',
+        args: [BigInt(invoiceId)],
+      }) as [bigint, string, bigint, number] | undefined;
       
-      const connectedCore = result as string;
-      const isConnected = connectedCore.toLowerCase() === CONTRACTS.PROTOCOL.toLowerCase();
+      if (!result) return null;
       
-      console.log('🔗 Verification module connection status:', {
-        connectedTo: connectedCore,
-        expectedCore: CONTRACTS.PROTOCOL,
-        isConnected
-      });
+      const [id, supplier, amount, status] = result;
       
-      return isConnected;
-    } catch (error) {
-      console.error('❌ Error checking verification connection:', error);
-      return false;
-    }
-  }, [publicClient, isConnected]);
-
-  // Connect verification module to core (if needed)
-  const connectVerificationToCore = useCallback(async (): Promise<TransactionResult> => {
-    console.log('🔗 Connecting verification module to core contract...');
-    
-    if (!isConnected || !address) {
-      return { hash: '', success: false, error: 'Wallet not connected' };
-    }
-
-    setLoading(true);
-    try {
-      const hash = await writeContractAsync({
-        address: CONTRACTS.VERIFICATION_MODULE,
-        abi: VERIFICATION_MODULE_ABI,
-        functionName: 'setCoreContract',
-        args: [CONTRACTS.PROTOCOL],
-      });
-
-      console.log('✅ Verification connection transaction submitted:', hash);
-      setTxHash(hash);
-      
-      return { hash, success: true };
-    } catch (error: any) {
-      console.error('❌ Verification connection failed:', error);
       return {
-        hash: '',
-        success: false,
-        error: error.shortMessage || error.message || 'Connection failed',
+        id: Number(id),
+        supplier,
+        amount: Number(amount),
+        status,
       };
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, address, writeContractAsync]);
-
-  // 🆕 Enhanced protocol health check
-  const getProtocolHealth = useCallback(async () => {
-    if (!isConnected || !publicClient) return null;
-
-    try {
-      console.log('🏥 Checking championship protocol health...');
-      
-      const [
-        functionsConfig,
-        lastResponse,
-        verificationConnection,
-        protocolStats
-      ] = await Promise.all([
-        getFunctionsConfig(),
-        getLastFunctionsResponse(),
-        checkVerificationConnection(),
-        refetchProtocolStats()
-      ]);
-
-      const health = {
-        functionsConfigured: !!functionsConfig,
-        hasRecentResponse: !!(lastResponse && lastResponse.responseLength > 0),
-        verificationConnected: verificationConnection,
-        protocolActive: !!(protocolStats?.data && Array.isArray(protocolStats.data)),
-        subscriptionId: functionsConfig?.subscriptionId || 0,
-        responseLength: lastResponse?.responseLength || 0,
-      };
-
-      console.log('✅ Championship protocol health check:', health);
-      return health;
     } catch (error) {
-      console.error('❌ Protocol health check failed:', error);
+      console.error('Error getting invoice basics:', error);
       return null;
     }
-  }, [isConnected, publicClient, getFunctionsConfig, getLastFunctionsResponse, checkVerificationConnection, refetchProtocolStats]);
-
-  // Debug logging
-  useEffect(() => {
-    console.log('🚀 Championship YieldX Hook State:', {
-      contractAddresses: CONTRACTS,
-      userAddress: address,
-      chainId: chain?.id,
-      usdcBalance: Number(usdcBalance),
-      liveMarketData,
-      stats,
-      refreshCounter: forceRefreshCounter,
-    });
-  }, [address, chain, usdcBalance, liveMarketData, stats, forceRefreshCounter]);
-
-  // 🆕 Initialize Functions integration on connection
-  useEffect(() => {
-    const initializeFunctions = async () => {
-      if (isConnected && publicClient) {
-        try {
-          console.log('🔄 Initializing Chainlink Functions integration...');
-          
-          const config = await getFunctionsConfig();
-          if (config) {
-            console.log(`✅ Functions initialized with subscription ${config.subscriptionId}`);
-          }
-          
-          const response = await getLastFunctionsResponse();
-          if (response && response.responseLength > 0) {
-            console.log(`📡 Previous Functions response found: ${response.responseLength} bytes`);
-          }
-          
-          const connectionStatus = await checkVerificationConnection();
-          if (!connectionStatus) {
-            console.log('⚠️ Verification module not connected to core contract');
-          }
-        } catch (error) {
-          console.log('ℹ️ Functions integration not yet available');
-        }
-      }
+  }, [publicClient]);
+  
+  // Get invoice parties
+  const getInvoiceParties = useCallback(async (invoiceId: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvoiceParties',
+        args: [BigInt(invoiceId)],
+      }) as [string, string, string, string] | undefined;
+      
+      if (!result) return null;
+      
+      const [buyer, exporterName, buyerName, commodity] = result;
+      
+      return {
+        buyer,
+        exporterName,
+        buyerName,
+        commodity,
+      };
+    } catch (error) {
+      console.error('Error getting invoice parties:', error);
+      return null;
+    }
+  }, [publicClient]);
+  
+  // Get invoice financials
+  const getInvoiceFinancials = useCallback(async (invoiceId: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvoiceFinancials',
+        args: [BigInt(invoiceId)],
+      }) as [bigint, bigint, bigint, bigint] | undefined;
+      
+      if (!result) return null;
+      
+      const [targetFunding, currentFunding, aprBasisPoints, dueDate] = result;
+      
+      return {
+        targetFunding: Number(targetFunding),
+        currentFunding: Number(currentFunding),
+        aprBasisPoints: Number(aprBasisPoints),
+        dueDate: Number(dueDate),
+      };
+    } catch (error) {
+      console.error('Error getting invoice financials:', error);
+      return null;
+    }
+  }, [publicClient]);
+  
+  // Get invoice locations
+  const getInvoiceLocations = useCallback(async (invoiceId: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvoiceLocations',
+        args: [BigInt(invoiceId)],
+      }) as [string, string] | undefined;
+      
+      if (!result) return null;
+      
+      const [supplierCountry, buyerCountry] = result;
+      
+      return {
+        supplierCountry,
+        buyerCountry,
+      };
+    } catch (error) {
+      console.error('Error getting invoice locations:', error);
+      return null;
+    }
+  }, [publicClient]);
+  
+  // Get invoice metadata
+  const getInvoiceMetadata = useCallback(async (invoiceId: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvoiceMetadata',
+        args: [BigInt(invoiceId)],
+      }) as [bigint, boolean, bigint] | undefined;
+      
+      if (!result) return null;
+      
+      const [createdAt, documentVerified, remainingFunding] = result;
+      
+      return {
+        createdAt: Number(createdAt),
+        documentVerified,
+        remainingFunding: Number(remainingFunding),
+      };
+    } catch (error) {
+      console.error('Error getting invoice metadata:', error);
+      return null;
+    }
+  }, [publicClient]);
+  
+  // Get investment basics
+  const getInvestmentBasics = useCallback(async (invoiceId: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvestmentBasics',
+        args: [BigInt(invoiceId)],
+      }) as [bigint, bigint, bigint, bigint] | undefined;
+      
+      if (!result) return null;
+      
+      const [targetFunding, currentFunding, remainingFunding, numInvestors] = result;
+      
+      return {
+        targetFunding: Number(targetFunding),
+        currentFunding: Number(currentFunding),
+        remainingFunding: Number(remainingFunding),
+        numInvestors: Number(numInvestors),
+      };
+    } catch (error) {
+      console.error('Error getting investment basics:', error);
+      return null;
+    }
+  }, [publicClient]);
+  
+  // Get investor data
+  const getInvestorData = useCallback(async (investorAddress: string, invoiceId: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvestorData',
+        args: [investorAddress as Address, BigInt(invoiceId)],
+      }) as bigint | undefined;
+      
+      return result ? Number(result) : null;
+    } catch (error) {
+      console.error('Error getting investor data:', error);
+      return null;
+    }
+  }, [publicClient]);
+  
+  // Get investor invoices
+  const getInvestorInvoices = useCallback(async (investorAddress: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvestorInvoices',
+        args: [investorAddress as Address],
+      }) as bigint[] | undefined;
+      
+      return result?.map(id => Number(id)) || [];
+    } catch (error) {
+      console.error('Error getting investor invoices:', error);
+      return [];
+    }
+  }, [publicClient]);
+  
+  // Get all invoices
+  const getAllInvoices = useCallback(async () => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getAllInvoices',
+      }) as bigint[] | undefined;
+      
+      return result?.map(id => Number(id)) || [];
+    } catch (error) {
+      console.error('Error getting all invoices:', error);
+      return [];
+    }
+  }, [publicClient]);
+  
+  // Get invoices by status
+  const getInvoicesByStatus = useCallback(async (status: number) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvoicesByStatus',
+        args: [status],
+      }) as bigint[] | undefined;
+      
+      return result?.map(id => Number(id)) || [];
+    } catch (error) {
+      console.error('Error getting invoices by status:', error);
+      return [];
+    }
+  }, [publicClient]);
+  
+  // ============ USDC FUNCTIONS ============
+  
+  // Get USDC allowance
+  const getUSDCAllowance = useCallback(async (spender: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.USDC,
+        abi: MockUSDCABI,
+        functionName: 'allowance',
+        args: [address as Address, spender as Address],
+      }) as bigint | undefined;
+      
+      return result ? Number(result) : 0;
+    } catch (error) {
+      console.error('Error getting USDC allowance:', error);
+      return 0;
+    }
+  }, [publicClient, address]);
+  
+  // ============ WRITE FUNCTIONS ============
+  
+  // Submit invoice to YieldXCore
+  const submitInvoice = useCallback(async (invoiceData: {
+    buyer: string;
+    amount: string;
+    commodity: string;
+    supplierCountry: string;
+    buyerCountry: string;
+    exporterName: string;
+    buyerName: string;
+    dueDate: number;
+    documentHash: string;
+  }) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('🚀 Submitting invoice to YieldXCore:', invoiceData);
+      
+      const tx = await writeYieldXCore({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'submitInvoice',
+        args: [
+          invoiceData.buyer as Address,
+          parseUnits(invoiceData.amount, 6), // USDC has 6 decimals
+          invoiceData.commodity,
+          invoiceData.supplierCountry,
+          invoiceData.buyerCountry,
+          invoiceData.exporterName,
+          invoiceData.buyerName,
+          BigInt(invoiceData.dueDate),
+          invoiceData.documentHash,
+        ],
+      });
+      
+      console.log('✅ Invoice submitted! TX:', tx);
+      return { success: true, txHash: tx };
+      
+    } catch (error) {
+      console.error('❌ Error submitting invoice:', error);
+      setError(error instanceof Error ? error.message : 'Failed to submit invoice');
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [writeYieldXCore]);
+  
+  // Invest in invoice
+  const investInInvoice = useCallback(async (invoiceId: string, amount: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log(`💰 Investing ${amount} USDC in invoice ${invoiceId}`);
+      
+      const tx = await writeYieldXCore({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'investInInvoice',
+        args: [BigInt(invoiceId), parseUnits(amount, 6)],
+      });
+      
+      console.log('✅ Investment successful! TX:', tx);
+      return { success: true, txHash: tx };
+      
+    } catch (error) {
+      console.error('❌ Error investing:', error);
+      setError(error instanceof Error ? error.message : 'Failed to invest');
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [writeYieldXCore]);
+  
+  // Start document verification with real form data
+  const startDocumentVerification = useCallback(async (verificationData: {
+    invoiceId: string;
+    documentHash: string;
+    commodity: string;
+    amount: string;
+    supplierCountry: string;
+    buyerCountry: string;
+    exporterName: string;
+    buyerName: string;
+  }) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('🔍 Starting document verification with real form data:', verificationData);
+      
+      const tx = await writeVerification({
+        address: CONTRACT_ADDRESSES.VERIFICATION_MODULE,
+        abi: YIELDX_VERIFICATION_ABI,
+        functionName: 'startDocumentVerification',
+        args: [
+          BigInt(verificationData.invoiceId),
+          verificationData.documentHash,
+          verificationData.commodity,
+          BigInt(verificationData.amount),
+          verificationData.supplierCountry,
+          verificationData.buyerCountry,
+          verificationData.exporterName,
+          verificationData.buyerName,
+        ],
+      });
+      
+      console.log('✅ Document verification started! TX:', tx);
+      return { success: true, txHash: tx };
+      
+    } catch (error) {
+      console.error('❌ Error starting verification:', error);
+      setError(error instanceof Error ? error.message : 'Failed to start verification');
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [writeVerification]);
+  
+  // Approve USDC spending
+  const approveUSDC = useCallback(async (spender: string, amount: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log(`💳 Approving ${amount} USDC for ${spender}`);
+      
+      const tx = await writeUSDC({
+        address: CONTRACT_ADDRESSES.USDC,
+        abi: MockUSDCABI,
+        functionName: 'approve',
+        args: [spender as Address, parseUnits(amount, 6)],
+      });
+      
+      console.log('✅ USDC approved! TX:', tx);
+      return { success: true, txHash: tx };
+      
+    } catch (error) {
+      console.error('❌ Error approving USDC:', error);
+      setError(error instanceof Error ? error.message : 'Failed to approve USDC');
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [writeUSDC]);
+  
+  // Mint test USDC
+  const mintTestUSDC = useCallback(async (amount: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log(`🏦 Minting ${amount} test USDC`);
+      
+      const tx = await writeUSDC({
+        address: CONTRACT_ADDRESSES.USDC,
+        abi: MockUSDCABI,
+        functionName: 'mint',
+        args: [address as Address, parseUnits(amount, 6)],
+      });
+      
+      console.log('✅ Test USDC minted! TX:', tx);
+      return { success: true, txHash: tx };
+      
+    } catch (error) {
+      console.error('❌ Error minting USDC:', error);
+      setError(error instanceof Error ? error.message : 'Failed to mint USDC');
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [writeUSDC, address]);
+  
+  // Update live prices
+  const updateLivePrices = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('📊 Updating live prices from Chainlink oracles');
+      
+      const tx = await writePriceManager({
+        address: CONTRACT_ADDRESSES.PRICE_MANAGER,
+        abi: YieldXPriceManagerABI,
+        functionName: 'updateLivePrices',
+      });
+      
+      console.log('✅ Live prices updated! TX:', tx);
+      return { success: true, txHash: tx };
+      
+    } catch (error) {
+      console.error('❌ Error updating prices:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update prices');
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [writePriceManager]);
+  
+  // Test verification request
+  const testVerificationRequest = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('🧪 Sending test verification request');
+      
+      const tx = await writeVerification({
+        address: CONTRACT_ADDRESSES.VERIFICATION_MODULE,
+        abi: YIELDX_VERIFICATION_ABI,
+        functionName: 'testDirectRequest',
+      });
+      
+      console.log('✅ Test verification request sent! TX:', tx);
+      return { success: true, txHash: tx };
+      
+    } catch (error) {
+      console.error('❌ Error sending test verification:', error);
+      setError(error instanceof Error ? error.message : 'Failed to send verification');
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [writeVerification]);
+  
+  // ============ LEGACY COMPATIBILITY FUNCTIONS ============
+  
+  // Legacy function names for backward compatibility
+  const getInvestmentInfo = useCallback(async (invoiceId: string) => {
+    const basics = await getInvestmentBasics(invoiceId);
+    if (!basics) return null;
+    
+    return {
+      totalInvestment: basics.currentFunding / 1e6, // Convert to USDC
+      numInvestors: basics.numInvestors,
+      investors: [], // Not available in YieldXCore
     };
-
-    initializeFunctions();
-  }, [isConnected, publicClient, getFunctionsConfig, getLastFunctionsResponse, checkVerificationConnection]);
-
+  }, [getInvestmentBasics]);
+  
+  const getInvoiceBasicData = useCallback(async (invoiceId: string) => {
+    const basics = await getInvoiceBasics(invoiceId);
+    const parties = await getInvoiceParties(invoiceId);
+    
+    if (!basics || !parties) return null;
+    
+    return {
+      commodityType: parties.commodity,
+      invoiceAmount: basics.amount / 1e6, // Convert to USDC
+      exporter: parties.exporterName,
+      buyer: parties.buyer,
+    };
+  }, [getInvoiceBasics, getInvoiceParties]);
+  
+  // Add a refreshBalance function
+  const refreshBalance = useCallback(async () => {
+    if (!address || !publicClient) return;
+    try {
+      const balance = await publicClient.readContract({
+        address: CONTRACT_ADDRESSES.USDC,
+        abi: MockUSDCABI,
+        functionName: 'balanceOf',
+        args: [address]
+      });
+      return Number(balance) / 1e6;
+    } catch (error) {
+      console.error('Error refreshing balance:', error);
+      return null;
+    }
+  }, [address, publicClient]);
+  
+  // Aliases for Dashboard compatibility
+  const stats = protocolStats ? {
+    totalInvoices: Number(protocolStats[0]),
+    totalFundsRaised: Number(protocolStats[1]) / 1e6,
+    pendingInvoices: Number(protocolStats[2]),
+    verifiedInvoices: Number(protocolStats[3]),
+    fundedInvoices: Number(protocolStats[4]),
+  } : null;
+  const loading = isLoading;
+  const contracts = CONTRACT_ADDRESSES;
+  const testDirectRequest = testVerificationRequest;
+  
+  // getInvoiceDetails: combine basic invoice info
+  const getInvoiceDetails = useCallback(async (invoiceId: string) => {
+    const [basics, parties, financials, locations, metadata] = await Promise.all([
+      getInvoiceBasics(invoiceId),
+      getInvoiceParties(invoiceId),
+      getInvoiceFinancials(invoiceId),
+      getInvoiceLocations(invoiceId),
+      getInvoiceMetadata(invoiceId)
+    ]);
+    return { basics, parties, financials, locations, metadata };
+  }, [getInvoiceBasics, getInvoiceParties, getInvoiceFinancials, getInvoiceLocations, getInvoiceMetadata]);
+  
+  // getFunctionsConfig: stub
+  const getFunctionsConfig = useCallback(async () => null, []);
+  
+  // Return all functions and data
   return {
     // Connection state
     isConnected,
     address,
-    chain,
-    loading: loading || isWritePending || isTransactionLoading,
+    isLoading,
+    error,
     
-    // Balance data
-    usdcBalance: Number(usdcBalance),
-    refreshBalance,
-    balanceRefreshKey: forceRefreshCounter,
-    isBalanceLoading,
+    // Protocol data
+    protocolStats: stats,
+    invoiceCounter: invoiceCounter ? Number(invoiceCounter) : 0,
     
-    // Live market data from your championship contracts
-    liveMarketData,
-    stats,
+    // Live market data
+    liveMarketData: priceData ? {
+      ethPrice: Number(priceData[0]) / 1e8,
+      usdcPrice: Number(priceData[1]) / 1e8,
+      btcPrice: Number(priceData[2]) / 1e8,
+      linkPrice: Number(priceData[3]) / 1e8,
+      lastUpdate: Number(priceData[4]),
+      marketVolatility: volatilityData ? Number(volatilityData) / 100 : 0.02,
+      initialPricesFetched: Boolean(initialPricesFetched),
+    } : null,
     
-    // Transaction state
-    isTransactionSuccess,
-    txHash,
-    
-    // Core functions
-    submitInvoice,
-    investInInvoice,
-    mintTestUSDC,
-    approveUSDC,
-    
-    // Price functions
-    updateLivePrices,
-    
-    // Data functions for your championship protocol
-    getInvoiceDetails,
-    getInvestmentInfo,
-    getInvestmentOpportunities,
-    
-    // 🆕 COMPLETE Chainlink Functions integration
-    getFunctionsConfig,
-    getLastFunctionsResponse,
-    getVerificationData,
-    startDocumentVerification,  // ✅ Now available!
-    testDirectRequest,
-    
-    // 🆕 Additional Functions utilities
-    checkVerificationConnection,
-    connectVerificationToCore,
-    getProtocolHealth,
-    
-    // Debug info
-    writeError,
-    balanceError,
+    // USDC data
+    usdcBalance: usdcBalance ? Number(usdcBalance) / 1e6 : 0,
     
     // Contract addresses
-    contracts: CONTRACTS,
+    contractAddresses: CONTRACT_ADDRESSES,
+    contracts,
+    
+    // YieldXCore functions
+    getInvestmentOpportunities,
+    getInvoiceBasics,
+    getInvoiceParties,
+    getInvoiceFinancials,
+    getInvoiceLocations,
+    getInvoiceMetadata,
+    getInvestmentBasics,
+    getInvestorData,
+    getInvestorInvoices,
+    getAllInvoices,
+    getInvoicesByStatus,
+    submitInvoice,
+    investInInvoice,
+    
+    // Verification functions
+    getVerificationData,
+    getLastFunctionsResponse,
+    startDocumentVerification,
+    testVerificationRequest,
+    testDirectRequest,
+    
+    // USDC functions
+    getUSDCAllowance,
+    approveUSDC,
+    mintTestUSDC,
+    refreshBalance,
+    
+    // Price management
+    updateLivePrices,
+    
+    // Dashboard compatibility
+    loading,
+    getInvoiceDetails,
+    getFunctionsConfig,
+    
+    // Legacy compatibility
+    getInvestmentInfo,
+    getInvoiceBasicData,
   };
-}
+};

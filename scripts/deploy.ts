@@ -44,7 +44,7 @@ async function main() {
     console.log(`   Protocol Version: ${PROTOCOL_CONFIG.VERSION}`);
     console.log("=" .repeat(60));
     
-    if (balance < hre.ethers.parseEther("0.5")) {
+    if (balance < hre.ethers.parseEther("0.4")) {
         throw new Error("❌ Insufficient ETH balance for deployment. Need at least 0.5 ETH");
     }
 
@@ -121,46 +121,112 @@ async function main() {
         console.log("=" .repeat(40));
 
         // 5. Use Your Proven Working YieldXVerificationModule from Remix
-        const verificationModuleAddress = "0x148f9528267E08A52EEa06A90e645d2D0Bd5e447";
-        console.log(`🎉 Using proven working YieldXVerificationModule: ${verificationModuleAddress}`);
+        const verificationModuleAddress = "0xDb0128B2680935DA2daab9D8dF3D9Eb5C523476d";
+        console.log(`🎉 Using latest working YieldXVerificationModule: ${verificationModuleAddress}`);
         
-        // Create interface for the verification module
+        // Create interface for the verification module - MATCHING YOUR ACTUAL CONTRACT
         const verificationModuleABI = [
-            "function setCoreContract(address _coreContract) external",
+            // Test functions (no setCoreContract in your new version)
             "function testDirectRequest() external returns (bytes32)",
-            "function coreContract() external view returns (address)",
-            "function getFunctionsConfig() external view returns (address router, uint64 subscriptionId, uint32 gasLimitConfig, bytes32 donIdConfig)",
+            "function ownerTestRequest() external returns (bytes32)",
+            
+            // Owner function
+            "function owner() external view returns (address)",
+            
+            // View functions that exist in your contract
             "function getLastFunctionsResponse() external view returns (bytes32 lastRequestId, bytes lastResponse, bytes lastError)",
+            "function getLastResponseDecoded() external view returns (string memory)",
             "function getDocumentVerification(uint256 invoiceId) external view returns (bool verified, bool valid, string memory details, uint256 risk, string memory rating, uint256 timestamp)",
-            "function startDocumentVerification(uint256 invoiceId, string memory documentHash, string memory commodity, uint256 amount, string memory supplierCountry, string memory buyerCountry, string memory exporterName, string memory buyerName) external returns (bytes32)"
+            "function getApiEndpoint() external pure returns (string memory)",
+            "function startDocumentVerification() external returns(bytes32)",
+            
+            // State variables as view functions
+            "function i_functionsSubscriptionId() external view returns (uint64)",
+            "function gasLimit() external view returns (uint32)",
+            "function donID() external view returns (bytes32)",
+            "function s_lastRequestId() external view returns (bytes32)",
+            "function isVerified(uint256) external view returns (bool)",
+            "function isValid(uint256) external view returns (bool)",
+            "function riskScore(uint256) external view returns (uint256)",
+            "function creditRating(uint256) external view returns (string memory)",
+            "function verificationDetails(uint256) external view returns (string memory)",
+            "function verificationTimestamp(uint256) external view returns (uint256)"
         ];
         
-        const verificationModule = new hre.ethers.Contract(verificationModuleAddress, verificationModuleABI, deployer);
-        deployedContracts.verificationModule = { address: verificationModuleAddress, contract: verificationModule };
+        // Create contract instance
+        const verificationModule = new hre.ethers.Contract(
+            verificationModuleAddress, 
+            verificationModuleABI, 
+            deployer
+        );
+        
+        // Add to deployed contracts tracking
+        deployedContracts.verificationModule = { 
+            address: verificationModuleAddress, 
+            contract: verificationModule 
+        };
 
         // Test the verification configuration
-        console.log("\n🔧 Testing Proven YieldXVerificationModule Configuration...");
+        console.log("\n🔧 Testing YieldXVerificationModule Configuration...");
         try {
-            const functionsConfig = await verificationModule.getFunctionsConfig();
-            const lastResponse = await verificationModule.getLastFunctionsResponse();
-            const docVerification = await verificationModule.getDocumentVerification(999);
+            const owner = await verificationModule.owner();
+            const subscriptionId = await verificationModule.i_functionsSubscriptionId();
+            const gasLimitSetting = await verificationModule.gasLimit();
+            const donIDSetting = await verificationModule.donID();
+            const apiEndpoint = await verificationModule.getApiEndpoint();
+            const lastRequestId = await verificationModule.s_lastRequestId();
             
-            console.log("✅ YieldXVerificationModule (Proven Working) Status:");
-            console.log(`   Functions Router: ${functionsConfig[0]}`);
-            console.log(`   Subscription ID: ${functionsConfig[1]}`);
-            console.log(`   Gas Limit: ${functionsConfig[2]}`);
-            console.log(`   DON ID: ${functionsConfig[3]}`);
-            console.log(`   Last Request ID: ${lastResponse[0]}`);
-            console.log(`   Last Response Length: ${lastResponse[1].length} bytes`);
-            console.log(`   Invoice 999 Verified: ${docVerification[0]}`);
-            console.log(`   Invoice 999 Valid: ${docVerification[1]}`);
-            console.log(`   Invoice 999 Risk Score: ${docVerification[3]}`);
-            console.log(`   Invoice 999 Credit Rating: ${docVerification[4]}`);
-            console.log(`   Verification Timestamp: ${new Date(Number(docVerification[5]) * 1000).toLocaleString()}`);
+            console.log("✅ YieldXVerificationModule Status:");
+            console.log(`   Contract Address: ${verificationModuleAddress}`);
+            console.log(`   Owner: ${owner}`);
+            console.log(`   Deployer: ${deployerAddress}`);
+            console.log(`   Owner Match: ${owner.toLowerCase() === deployerAddress.toLowerCase() ? "✅ YES" : "❌ NO"}`);
+            console.log(`   API Endpoint: ${apiEndpoint}`);
+            console.log(`   Subscription ID: ${subscriptionId}`);
+            console.log(`   Gas Limit: ${gasLimitSetting}`);
+            console.log(`   DON ID: ${donIDSetting}`);
+            console.log(`   Last Request ID: ${lastRequestId}`);
+            
+            // Check verification results for known invoices
+            try {
+                const docVerification999 = await verificationModule.getDocumentVerification(999);
+                const docVerification888 = await verificationModule.getDocumentVerification(888);
+                
+                console.log("\n📋 Verification Results:");
+                if (docVerification999[0]) { // if verified
+                    console.log(`   Invoice 999 - Verified: ${docVerification999[0]}, Valid: ${docVerification999[1]}, Risk: ${docVerification999[3]}, Rating: ${docVerification999[4]}`);
+                    if (docVerification999[5] > 0) {
+                        const timestamp = new Date(Number(docVerification999[5]) * 1000);
+                        console.log(`   Last 999 Verification: ${timestamp.toLocaleString()}`);
+                    }
+                }
+                
+                if (docVerification888[0]) { // if verified
+                    console.log(`   Invoice 888 - Verified: ${docVerification888[0]}, Valid: ${docVerification888[1]}, Risk: ${docVerification888[3]}, Rating: ${docVerification888[4]}`);
+                    if (docVerification888[5] > 0) {
+                        const timestamp = new Date(Number(docVerification888[5]) * 1000);
+                        console.log(`   Last 888 Verification: ${timestamp.toLocaleString()}`);
+                    }
+                }
+                
+                // Show last response for debugging
+                try {
+                    const lastResponse = await verificationModule.getLastFunctionsResponse();
+                    const decodedResponse = await verificationModule.getLastResponseDecoded();
+                    console.log(`   Last Response Length: ${lastResponse[1].length} bytes`);
+                    console.log(`   Last Response Decoded: "${decodedResponse}"`);
+                } catch (error: any) {
+                    console.log(`   Could not read last response: ${error.message}`);
+                }
+                
+            } catch (error: any) {
+                console.log(`   ⚠️ Could not read verification history: ${error.message}`);
+            }
+            
         } catch (error: any) {
-            console.log(`⚠️ Could not read verification state: ${error.message}`);
+            console.log(`⚠️ Could not read verification configuration: ${error.message}`);
+            console.log(`   Error details: ${error.reason || error.message}`);
         }
-
         console.log("\n🏗️ PHASE 3: SUPPORTING MODULES");
         console.log("=" .repeat(40));
 

@@ -11,7 +11,7 @@ import {
     Logger
   } from '@nestjs/common';
 import { CacheInterceptor } from '@nestjs/cache-manager';
-import { 
+  import { 
     ApiTags, 
     ApiOperation, 
     ApiResponse, 
@@ -33,7 +33,7 @@ import {
     private readonly logger = new Logger(VerificationController.name);
   
     constructor(private readonly verificationService: VerificationService) {}
-
+  
     // ============ NEW: ROOT HEALTH CHECK ============
     @Get()
     @HttpCode(HttpStatus.OK)
