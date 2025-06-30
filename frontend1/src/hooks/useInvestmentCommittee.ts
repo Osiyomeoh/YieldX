@@ -1,5 +1,6 @@
 // src/hooks/useInvestmentCommittee.ts - Multi-Stage Verification & Approval System
 import { useState, useEffect, useCallback } from 'react';
+// @ts-ignore
 import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits, formatUnits, getAddress, keccak256, toBytes } from 'viem';
 

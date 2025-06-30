@@ -12,12 +12,12 @@ import { LandingPage } from './components/pages/LandingPage';
 import { Dashboard } from './components/pages/Dashboard';
 import  InvestPage  from './components/pages/InvestPage';
 import { SubmitInvoice } from './components/pages/SubmitInvoice';
-import { NFTInvoiceGallery } from './components/NFTInvoiceGallery';
+// import { NFTInvoiceGallery } from './components/NFTInvoiceGallery';
 
 import { VideoModal } from './components/ui/VideoModal';
 import { useYieldX } from './hooks/useYieldX';
 import { useInvestmentCommittee } from './hooks/useInvestmentCommittee';
-import { useNFTInvoiceSystem } from './hooks/useNFTIvoiceSystem';
+// import { useNFTInvoiceSystem } from './hooks/useNFTIvoiceSystem';
 
 const queryClient = new QueryClient();
 
@@ -54,8 +54,8 @@ function AppContent() {
 
   // Hooks for blockchain integration
   const { isConnected, submitInvoice, loading } = useYieldX();
-  const { isCommitteeMember, committeeRole } = useInvestmentCommittee();
-  const { getNFTStats } = useNFTInvoiceSystem();
+  // const { isCommitteeMember, committeeRole } = useInvestmentCommittee();
+  // const { getNFTStats } = useNFTInvoiceSystem();
 
   // Sync tab changes with URL
   const handleTabChange = (newTab: TabId) => {
@@ -87,10 +87,10 @@ function AppContent() {
   }, []); // Only run on mount
 
   // Get real data from hooks
-  const nftStats = getNFTStats();
-  const totalVolume = nftStats.totalValue || 2450000;
-  const currentAPR = nftStats.averageAPR || 10.0;
-  const activeInvoices = nftStats.totalNFTs || 12;
+  // const nftStats = getNFTStats();
+  // const totalVolume = nftStats.totalValue || 2450000;
+  // const currentAPR = nftStats.averageAPR || 10.0;
+  // const activeInvoices = nftStats.totalNFTs || 12;
 
   const handleVideoClose = () => setShowVideo(false);
   const handleTryDemo = () => handleTabChange('dashboard');
@@ -100,8 +100,7 @@ function AppContent() {
       <Navigation 
         activeTab={activeTab} 
         setActiveTab={handleTabChange} // Use the new handler
-        isCommitteeMember={isCommitteeMember}
-        committeeRole={committeeRole}
+       
       />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
@@ -109,8 +108,8 @@ function AppContent() {
           <LandingPage 
             setActiveTab={handleTabChange} // Use the new handler
             setShowVideo={setShowVideo}
-            totalVolume={totalVolume}
-            currentAPR={currentAPR}
+            totalVolume={0}
+            currentAPR={0}
           />
         )}
         
@@ -131,9 +130,9 @@ function AppContent() {
           <SubmitInvoice />
         )}
 
-        {activeTab === 'nft-marketplace' && (
+        {/* {activeTab === 'nft-marketplace' && (
           <NFTInvoiceGallery />
-        )}
+        )} */}
 
         
       </main>
