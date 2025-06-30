@@ -250,33 +250,42 @@ npm run gas-report
 - **Geographic Focus**: Africa specialization vs generic approach
 - **Professional Grade**: Enterprise features vs retail-only
 
-## 🛣️ Roadmap
+🛣️ Roadmap
+Phase 1 (Current - July 2025) - Core Protocol ✅
 
-### Phase 1 (Current) - Core Protocol ✅
-- ✅ Smart contract architecture
-- ✅ Chainlink Functions integration
-- ✅ Invoice verification system
-- ✅ Investment & yield distribution
-- ✅ Comprehensive testing
+✅ Smart contract architecture
+✅ Chainlink Functions integration
+✅ Invoice verification system
+✅ Investment & yield distribution
+✅ Comprehensive testing
 
-### Phase 2 (Q1 2024) - Scale & Security
-- 🔄 Security audit by top firm
-- 🔄 Mainnet deployment preparation
-- 🔄 Insurance partnerships
-- 🔄 Advanced risk modeling
+Phase 2 (Q3 2025) - Scale & Security
 
-### Phase 3 (Q2 2024) - Market Expansion  
-- 📅 Nigeria pilot program (100 SMEs)
-- 📅 Bank partnerships for fiat on/off ramps
-- 📅 Mobile app for African exporters
-- 📅 Regulatory compliance framework
+🔄 Security audit by leading firm
+🔄 Mainnet deployment preparation
+🔄 Insurance partnerships
+🔄 Advanced risk modeling with ML
 
-### Phase 4 (Q3 2024) - Multi-Chain
-- 📅 CCIP integration for cross-chain assets
-- 📅 Polygon and Avalanche deployment
-- 📅 Advanced automation features
-- 📅 DAO governance implementation
+Phase 3 (Q4 2025) - Market Expansion
 
+📅 Nigeria pilot program (100 SMEs)
+📅 Bank partnerships for fiat on/off ramps
+📅 Mobile app for African exporters
+📅 Regulatory compliance framework
+
+Phase 4 (Q1 2026) - Multi-Chain Expansion
+
+📅 CCIP integration for cross-chain assets
+📅 Polygon and Avalanche deployment
+📅 Advanced automation features
+📅 DAO governance implementation
+
+Phase 5 (Q2 2026) - Global Scale
+
+📅 Expand to Southeast Asia markets
+📅 Traditional finance partnerships
+📅 Institutional investor onboarding
+📅 $100M+ TVL milestone
 ## 📄 Documentation
 
 - **[📐 Architecture Guide](docs/ARCHITECTURE.md)** - System design and contract interactions
