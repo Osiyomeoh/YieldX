@@ -1,3 +1,4 @@
+```markdown
 # YieldX Protocol - Tokenized African Trade Receivables
 
 Real-world asset (RWA) tokenization platform for African trade finance using Chainlink infrastructure.
@@ -283,15 +284,19 @@ npm run gas-report
 - 📅 Institutional investor onboarding
 - 📅 $100M+ TVL milestone
 
-- **[📐 Architecture Guide](docs/ARCHITECTURE.md)** - System design and contract interactions
-- **[💻 Smart Contract API](docs/CONTRACTS.md)** - Function reference and integration
-- **[🎨 Frontend Integration](docs/FRONTEND.md)** - React hooks and component usage  
-- **[🚀 Deployment Guide](docs/DEPLOYMENT.md)** - Setup and configuration instructions
-- **[🔗 Chainlink Integration](docs/CHAINLINK.md)** - Oracle implementation details
+## 📄 Documentation
+
+Technical documentation and integration guides available in the repository:
+
+- **Architecture Guide** - System design and contract interactions
+- **Smart Contract API** - Function reference and integration
+- **Frontend Integration** - React hooks and component usage  
+- **Deployment Guide** - Setup and configuration instructions
+- **Chainlink Integration** - Oracle implementation details
 
 ## 🤝 Contributing
 
-We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions from the community! Please see our Contributing Guide for details.
 
 ### Development Setup
 ```bash
@@ -315,15 +320,15 @@ npm test
 - **Insurance Coverage**: Protocol insurance for investor protection
 
 ### Report Security Issues
-Email: security@yieldx-protocol.com (PGP key available)
+For security concerns, please contact the development team through the repository's security reporting feature.
 
 ## 📞 Contact & Community
 
-- **Website**: [https://yieldx-protocol.com](https://yieldx-protocol.com)
-- **Twitter**: [@YieldXProtocol](https://twitter.com/YieldXProtocol)
-- **Discord**: [Join our community](https://discord.gg/yieldx)
-- **Telegram**: [YieldX Announcements](https://t.me/yieldx_protocol)
-- **Email**: hello@yieldx-protocol.com
+For questions, support, or collaboration opportunities, please reach out through:
+
+- **GitHub Issues**: For technical questions and bug reports
+- **GitHub Discussions**: For general questions and community discussion
+- **Project Repository**: [YieldX Protocol GitHub](https://github.com/your-org/yieldx-protocol)
 
 ## 📄 License
 
