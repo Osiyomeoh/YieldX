@@ -1,5 +1,6 @@
 // src/App.tsx - Complete YieldX App with URL Persistence
 import React, { useState, useEffect } from 'react';
+// @ts-ignore
 import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,7 +13,7 @@ import { Dashboard } from './components/pages/Dashboard';
 import  InvestPage  from './components/pages/InvestPage';
 import { SubmitInvoice } from './components/pages/SubmitInvoice';
 import { NFTInvoiceGallery } from './components/NFTInvoiceGallery';
-import { CommitteeDashboard } from './components/CommitteeDashboard';
+
 import { VideoModal } from './components/ui/VideoModal';
 import { useYieldX } from './hooks/useYieldX';
 import { useInvestmentCommittee } from './hooks/useInvestmentCommittee';
@@ -115,11 +116,8 @@ function AppContent() {
         
         {activeTab === 'dashboard' && (
           <Dashboard 
-            setActiveTab={handleTabChange} // Use the new handler
-            totalVolume={totalVolume}
-            currentAPR={currentAPR}
-            activeInvoices={activeInvoices}
-          />
+          setActiveTab={handleTabChange}
+        />
         )}
         
         {activeTab === 'invest' && (
@@ -137,9 +135,7 @@ function AppContent() {
           <NFTInvoiceGallery />
         )}
 
-        {activeTab === 'committee' && (
-          <CommitteeDashboard />
-        )}
+        
       </main>
 
       <VideoModal 

@@ -1,5 +1,6 @@
 // hooks/useYieldX.ts - Complete YieldXCore Integration with Imported ABIs
 import { useState, useEffect, useCallback } from 'react';
+// @ts-ignore
 import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt, usePublicClient, useWalletClient } from 'wagmi';
 import { parseUnits, formatUnits, Address } from 'viem';
 
