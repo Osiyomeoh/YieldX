@@ -60,6 +60,8 @@
     "postcss": "^8.4.31",
     "tailwindcss": "^3.4.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "ajv": "6.12.6",
+    "ajv-keywords": "3.5.2"
   }
 }
