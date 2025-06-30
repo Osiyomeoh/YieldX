@@ -1,4 +1,4 @@
-```markdown
+
 # YieldX Protocol - Tokenized African Trade Receivables
 
 Real-world asset (RWA) tokenization platform for African trade finance using Chainlink infrastructure.
