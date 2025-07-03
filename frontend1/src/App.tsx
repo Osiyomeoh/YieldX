@@ -49,7 +49,7 @@ function AppContent() {
   };
 
   const [activeTab, setActiveTab] = useState<TabId>(getInitialTab);
-  const [investAmount, setInvestAmount] = useState<string>('1000');
+
   const [showVideo, setShowVideo] = useState<boolean>(false);
 
   // Hooks for blockchain integration
@@ -121,8 +121,7 @@ function AppContent() {
         
         {activeTab === 'invest' && (
           <InvestPage 
-            investAmount={investAmount}
-            setInvestAmount={setInvestAmount}
+           
           />
         )}
         

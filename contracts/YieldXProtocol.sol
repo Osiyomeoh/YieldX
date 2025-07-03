@@ -9,8 +9,8 @@ import "./YieldXInvestmentModule.sol";
 import "./YieldXVRFModule.sol";
 
 /**
- * @title YieldXCore - Stack Safe Modular Architecture
- * @notice Main contract with all functions optimized to avoid stack too deep
+ * @title YieldXCore - Fixed Investment Flow
+ * @notice Main contract with working investment system
  */
 contract YieldXCore {
     
@@ -52,7 +52,7 @@ contract YieldXCore {
     enum InvoiceStatus { 
         Submitted,       // 0 - Just submitted
         Verifying,       // 1 - Under verification
-        Verified,        // 2 - Verified, open for investment
+        Verified,        // 2 - Verified, open for investment ✅
         FullyFunded,     // 3 - Investment target reached
         Approved,        // 4 - APR calculated, ready to fund
         Funded,          // 5 - Funds transferred to supplier
@@ -67,7 +67,8 @@ contract YieldXCore {
     
     // ============ EVENTS ============
     event InvoiceSubmitted(uint256 indexed invoiceId, address indexed supplier, uint256 amount, uint256 targetFunding);
-    event InvoiceVerified(uint256 indexed invoiceId, uint256 estimatedAPR, uint256 riskScore);
+    event InvoiceVerified(uint256 indexed invoiceId, uint256 aprBasisPoints, uint256 riskScore);
+    event InvestmentMade(uint256 indexed invoiceId, address indexed investor, uint256 amount, uint256 newTotal);
     event InvoiceFullyFunded(uint256 indexed invoiceId, uint256 totalAmount, uint256 numInvestors);
     event InvoiceApproved(uint256 indexed invoiceId, uint256 aprBasisPoints);
     event InvoiceFunded(uint256 indexed invoiceId, uint256 fundingAmount);
@@ -87,16 +88,6 @@ contract YieldXCore {
     
     modifier notPaused() {
         require(!paused, "Protocol is paused");
-        _;
-    }
-    
-    modifier onlyModule() {
-        require(
-            msg.sender == address(verificationModule) ||
-            msg.sender == address(investmentModule) ||
-            msg.sender == address(vrfModule),
-            "Only modules can call"
-        );
         _;
     }
     
@@ -124,7 +115,7 @@ contract YieldXCore {
         investmentModule.setCoreContract(address(this));
         vrfModule.setCoreContract(address(this));
         
-        // Initialize NFT protocol
+        // Initialize NFT protocol  
         invoiceNFT.setProtocolAddress(address(this));
     }
     
@@ -190,7 +181,7 @@ contract YieldXCore {
         return invoiceId;
     }
     
-    // ============ MODULE CALLBACKS ============
+    // ============ FIXED VERIFICATION CALLBACK ============
     function onDocumentVerificationComplete(
         uint256 invoiceId,
         bool isValid,
@@ -198,52 +189,45 @@ contract YieldXCore {
         string memory creditRating
     ) external {
         require(msg.sender == address(verificationModule), "Only verification module");
+        require(invoiceId > 0 && invoiceId <= invoiceCounter, "Invalid invoice ID");
         
         Invoice storage invoice = invoices[invoiceId];
+        require(invoice.status == InvoiceStatus.Verifying, "Invoice not in verifying status");
+        
         invoice.documentVerified = isValid;
         
         if (isValid) {
+            // ✅ FIXED: Calculate APR immediately and set status to Verified
+            // Calculate APR based on risk score (8-15% range)
+            uint256 baseAPR = 800; // 8% in basis points
+            uint256 riskPremium = (riskScore * 700) / 100; // Up to 7% additional based on risk
+            invoice.aprBasisPoints = baseAPR + riskPremium;
+            
+            // Set status to verified - now available for investment
             invoice.status = InvoiceStatus.Verified;
-            uint256 aprEstimate = vrfModule.calculateAPREstimate(riskScore, invoice.dueDate);
-            emit InvoiceVerified(invoiceId, aprEstimate, riskScore);
+            
+            emit InvoiceVerified(invoiceId, invoice.aprBasisPoints, riskScore);
         } else {
             invoice.status = InvoiceStatus.Rejected;
             emit InvoiceRejected(invoiceId, "Failed document verification");
         }
     }
     
-    function onVRFComplete(uint256 invoiceId, uint256 randomness) external {
-        require(msg.sender == address(vrfModule), "Only VRF module");
-        
-        Invoice storage invoice = invoices[invoiceId];
-        
-        // Get verification data to calculate final APR
-       (, , , uint256 riskScore, , ) = verificationModule.getDocumentVerification(invoiceId);
-        
-        // Calculate final APR through VRF module
-        uint256 aprBasisPoints = vrfModule.calculateFinalAPR(
-            invoiceId,
-            invoice.commodity,
-            invoice.supplierCountry,
-            invoice.buyerCountry,
-            invoice.amount,
-            invoice.dueDate,
-            riskScore
-        );
-        
-        invoice.aprBasisPoints = aprBasisPoints;
-        invoice.status = InvoiceStatus.Approved;
-        
-        emit InvoiceApproved(invoiceId, aprBasisPoints);
-        
-        // Automatically fund the invoice
-        _fundInvoice(invoiceId);
-    }
-    
-    // ============ INVESTMENT SYSTEM ============
+    // ============ FIXED INVESTMENT SYSTEM ============
     function investInInvoice(uint256 invoiceId, uint256 amount) external validInvoice(invoiceId) notPaused {
         Invoice storage invoice = invoices[invoiceId];
-        require(invoice.status == InvoiceStatus.Verified, "Invoice not verified");
+        
+        // ✅ FIXED: Better validation and error messages
+        require(invoice.status == InvoiceStatus.Verified, "Invoice must be verified for investment");
+        require(amount > 0, "Investment amount must be positive");
+        require(invoice.currentFunding + amount <= invoice.targetFunding, "Investment exceeds target funding");
+        require(msg.sender != invoice.supplier, "Supplier cannot invest in own invoice");
+        
+        // ✅ FIXED: Check USDC allowance first
+       uint256 allowance = usdcToken.allowance(msg.sender, address(this));
+       require(allowance >= amount, "Insufficient USDC allowance for core contract");
+
+       require(usdcToken.transferFrom(msg.sender, address(investmentModule), amount), "USDC transfer failed");
         
         // Process investment through module
         uint256 newTotalFunding = investmentModule.makeInvestment(
@@ -255,33 +239,37 @@ contract YieldXCore {
             invoice.supplier
         );
         
+        // Update invoice funding
         invoice.currentFunding = newTotalFunding;
         
-        // Check if invoice is fully funded
+        emit InvestmentMade(invoiceId, msg.sender, amount, newTotalFunding);
+        
+        // ✅ FIXED: Simplified fully funded logic
         if (invoice.currentFunding >= invoice.targetFunding) {
             invoice.status = InvoiceStatus.FullyFunded;
             
             (uint256 totalInvestment, uint256 numInvestors,) = investmentModule.getInvestmentInfo(invoiceId);
             emit InvoiceFullyFunded(invoiceId, totalInvestment, numInvestors);
             
-            // Request VRF for final APR calculation
-            vrfModule.requestRandomAPR(invoiceId);
+            // ✅ FIXED: Directly fund without VRF complexity
+            _fundInvoiceDirectly(invoiceId);
         }
     }
     
-    function _fundInvoice(uint256 invoiceId) internal {
+    // ✅ FIXED: Simplified funding without VRF dependency
+    function _fundInvoiceDirectly(uint256 invoiceId) internal {
         Invoice storage invoice = invoices[invoiceId];
-        require(invoice.status == InvoiceStatus.Approved, "Invoice not approved");
+        require(invoice.status == InvoiceStatus.FullyFunded, "Invoice not fully funded");
         
         uint256 fundingAmount = invoice.currentFunding;
         
         // Transfer funds through investment module
         require(
             investmentModule.transferFundsToSupplier(invoiceId, invoice.supplier, fundingAmount),
-            "Transfer failed"
+            "Transfer to supplier failed"
         );
         
-        // Mint NFT
+        // Mint NFT to supplier
         invoiceNFT.mintToSupplier(
             invoice.supplier,
             invoiceId,
@@ -293,12 +281,19 @@ contract YieldXCore {
             invoice.dueDate,
             uint8(invoice.status),
             invoice.createdAt,
-            0, // Risk score from verification module
+            0, // Risk score - can be retrieved from verification module
             invoice.aprBasisPoints
         );
         
         invoice.status = InvoiceStatus.Funded;
         emit InvoiceFunded(invoiceId, fundingAmount);
+    }
+    
+    // ============ VRF CALLBACK (Optional) ============
+    function onVRFComplete(uint256 invoiceId, uint256 randomness) external {
+        require(msg.sender == address(vrfModule), "Only VRF module");
+        // This is optional and doesn't affect the main investment flow
+        // Can be used for additional randomness if needed
     }
     
     // ============ REPAYMENT ============
@@ -307,7 +302,7 @@ contract YieldXCore {
         require(invoice.status == InvoiceStatus.Funded, "Invoice not funded");
         require(msg.sender == invoice.buyer, "Only buyer can repay");
         
-        // Calculate repayment amount
+        // Calculate repayment amount with interest
         uint256 timeElapsed = block.timestamp - invoice.createdAt;
         uint256 annualInterest = (invoice.amount * invoice.aprBasisPoints) / 10000;
         uint256 interest = (annualInterest * timeElapsed) / 365 days;
@@ -325,9 +320,8 @@ contract YieldXCore {
         emit InvoiceRepaid(invoiceId, repaymentAmount, totalProfit);
     }
     
-    // ============ STACK-SAFE VIEW FUNCTIONS ============
+    // ============ VIEW FUNCTIONS ============
     
-    // Basic invoice info (4 parameters - SAFE)
     function getInvoiceBasics(uint256 invoiceId) external view validInvoice(invoiceId) returns (
         uint256 id,
         address supplier,
@@ -338,7 +332,6 @@ contract YieldXCore {
         return (invoice.id, invoice.supplier, invoice.amount, invoice.status);
     }
     
-    // Invoice parties (4 parameters - SAFE)
     function getInvoiceParties(uint256 invoiceId) external view validInvoice(invoiceId) returns (
         address buyer,
         string memory exporterName,
@@ -349,7 +342,6 @@ contract YieldXCore {
         return (invoice.buyer, invoice.exporterName, invoice.buyerName, invoice.commodity);
     }
     
-    // Invoice locations (2 parameters - SAFE)
     function getInvoiceLocations(uint256 invoiceId) external view validInvoice(invoiceId) returns (
         string memory supplierCountry,
         string memory buyerCountry
@@ -358,7 +350,6 @@ contract YieldXCore {
         return (invoice.supplierCountry, invoice.buyerCountry);
     }
     
-    // Invoice financials (4 parameters - SAFE)
     function getInvoiceFinancials(uint256 invoiceId) external view validInvoice(invoiceId) returns (
         uint256 targetFunding,
         uint256 currentFunding,
@@ -369,7 +360,6 @@ contract YieldXCore {
         return (invoice.targetFunding, invoice.currentFunding, invoice.aprBasisPoints, invoice.dueDate);
     }
     
-    // Invoice metadata (3 parameters - SAFE)
     function getInvoiceMetadata(uint256 invoiceId) external view validInvoice(invoiceId) returns (
         uint256 createdAt,
         bool documentVerified,
@@ -383,7 +373,6 @@ contract YieldXCore {
         );
     }
     
-    // Investment basics (4 parameters - SAFE)
     function getInvestmentBasics(uint256 invoiceId) external view validInvoice(invoiceId) returns (
         uint256 targetFunding,
         uint256 currentFunding,
@@ -401,13 +390,16 @@ contract YieldXCore {
         );
     }
     
-    // Investment opportunities (returns array - SAFE)
+    // ✅ FIXED: Only return verified invoices with APR > 0
     function getInvestmentOpportunities() external view returns (uint256[] memory) {
         uint256[] memory opportunities = new uint256[](invoiceCounter);
         uint256 count = 0;
         
         for (uint256 i = 1; i <= invoiceCounter; i++) {
-            if (invoices[i].status == InvoiceStatus.Verified) {
+            Invoice memory invoice = invoices[i];
+            if (invoice.status == InvoiceStatus.Verified && 
+                invoice.aprBasisPoints > 0 && 
+                invoice.currentFunding < invoice.targetFunding) {
                 opportunities[count] = i;
                 count++;
             }
@@ -421,7 +413,6 @@ contract YieldXCore {
         return result;
     }
     
-    // Invoices by status (returns array - SAFE)
     function getInvoicesByStatus(InvoiceStatus status) external view returns (uint256[] memory) {
         uint256[] memory temp = new uint256[](invoiceCounter);
         uint256 count = 0;
@@ -441,7 +432,6 @@ contract YieldXCore {
         return result;
     }
     
-    // Protocol stats (5 parameters - SAFE)
     function getProtocolStats() external view returns (
         uint256 totalInvoices,
         uint256 totalFundsRaised,
@@ -470,7 +460,7 @@ contract YieldXCore {
         return (invoiceCounter, totalRaised, pending, verified, funded);
     }
     
-    // ============ SIMPLE GETTERS (1-2 parameters - ALWAYS SAFE) ============
+    // ============ SIMPLE GETTERS ============
     function getInvoiceStatus(uint256 invoiceId) external view validInvoice(invoiceId) returns (InvoiceStatus) {
         return invoices[invoiceId].status;
     }
@@ -565,7 +555,7 @@ contract YieldXCore {
     
     // ============ VERSION & INFO ============
     function version() external pure returns (string memory) {
-        return "YieldXCore v4.1.0 - Stack Safe Modular";
+        return "YieldXCore v4.2.0 - Fixed Investment Flow";
     }
     
     function getContractInfo() external view returns (
@@ -576,7 +566,7 @@ contract YieldXCore {
         uint256 totalInvoices
     ) {
         return (
-            "YieldX Protocol - Stack Safe",
+            "YieldX Protocol - Fixed Investment",
             this.version(),
             owner,
             paused,

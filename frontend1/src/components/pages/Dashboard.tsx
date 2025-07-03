@@ -545,6 +545,19 @@ export function Dashboard({ setActiveTab }: DashboardProps) {
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent mb-4">
           YieldX Protocol Dashboard
         </h1>
+        {/* Demo Link Button */}
+        <div className="mb-4 flex justify-center">
+          <a
+            href="https://youtu.be/jC2dcIWlO8c"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-yellow-400 text-white font-bold rounded-xl shadow-lg hover:from-red-600 hover:to-yellow-500 transition-colors text-lg"
+            style={{ textDecoration: 'none' }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" width="24" height="24"><path d="M23.498 6.186a2.994 2.994 0 0 0-2.112-2.12C19.228 3.5 12 3.5 12 3.5s-7.228 0-9.386.566A2.994 2.994 0 0 0 .502 6.186C0 8.344 0 12 0 12s0 3.656.502 5.814a2.994 2.994 0 0 0 2.112 2.12C4.772 20.5 12 20.5 12 20.5s7.228 0 9.386-.566a2.994 2.994 0 0 0 2.112-2.12C24 15.656 24 12 24 12s0-3.656-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+            Watch Demo
+          </a>
+        </div>
         <div className="flex items-center justify-center gap-4 mb-4 flex-wrap">
           <p className="text-xl text-gray-600">Live data from championship Sepolia deployment</p>
           <div className="flex items-center gap-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">

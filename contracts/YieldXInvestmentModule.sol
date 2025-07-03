@@ -42,34 +42,33 @@ contract YieldXInvestmentModule {
     
     // ============ INVESTMENT FUNCTIONS ============
     function makeInvestment(
-        uint256 invoiceId,
-        address investor,
-        uint256 amount,
-        uint256 targetFunding,
-        uint256 currentFunding,
-        address supplier
-    ) external onlyCoreContract returns (uint256 newTotalFunding) {
-        require(amount > 0, "Investment amount must be positive");
-        require(currentFunding + amount <= targetFunding, "Exceeds target");
-        require(investor != supplier, "Supplier cannot invest in own invoice");
-        
-        // Transfer USDC from investor to this contract
-        require(usdcToken.transferFrom(investor, address(this), amount), "USDC transfer failed");
-        
-        // Record investment
-        if (investments[invoiceId][investor] == 0) {
-            invoiceInvestors[invoiceId].push(investor);
-             investorInvoices[investor].push(invoiceId);
-        }
-        
-        investments[invoiceId][investor] += amount;
-        totalInvestments[invoiceId] += amount;
-        newTotalFunding = currentFunding + amount;
-        
-        emit InvestmentMade(invoiceId, investor, amount, newTotalFunding);
-        
-        return newTotalFunding;
+    uint256 invoiceId,
+    address investor,
+    uint256 amount,
+    uint256 targetFunding,
+    uint256 currentFunding,
+    address supplier
+) external onlyCoreContract returns (uint256 newTotalFunding) {
+    require(amount > 0, "Investment amount must be positive");
+    require(currentFunding + amount <= targetFunding, "Exceeds target");
+    require(investor != supplier, "Supplier cannot invest in own invoice");
+    
+   
+    
+    // Record investment (USDC already transferred by Core)
+    if (investments[invoiceId][investor] == 0) {
+        invoiceInvestors[invoiceId].push(investor);
+        investorInvoices[investor].push(invoiceId);
     }
+    
+    investments[invoiceId][investor] += amount;
+    totalInvestments[invoiceId] += amount;
+    newTotalFunding = currentFunding + amount;
+    
+    emit InvestmentMade(invoiceId, investor, amount, newTotalFunding);
+    
+    return newTotalFunding;
+}
     
     function transferFundsToSupplier(
         uint256 invoiceId,

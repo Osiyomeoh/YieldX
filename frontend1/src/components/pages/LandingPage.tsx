@@ -100,24 +100,13 @@ export function LandingPage({
             <div className="relative">
               {/* Main hero image */}
               <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-gray-200">
-                {/* Replace with actual image */}
-                <div className="bg-gradient-to-br from-emerald-400 to-blue-500 aspect-[4/3] flex items-center justify-center">
-                  <div className="text-center text-white space-y-4 p-8">
-                    <Globe className="w-16 h-16 mx-auto opacity-80" />
-                    <div className="text-xl font-semibold">African Trade → Global DeFi</div>
-                    <div className="text-sm opacity-90">Replace with: African entrepreneur with laptop</div>
-                  </div>
-                </div>
-                {/* 
-                Uncomment and replace with actual image:
-                <img 
-                  src="/african-entrepreneur-hero.jpg" 
-                  alt="African entrepreneur managing trade finance digitally"
-                  className="w-full h-full object-cover"
+                <img
+                  src="/images/focused-african-entrepreneur-using-laptop-while-sitting-leather-chair_854300-1231.jpg"
+                  alt="African entrepreneur with laptop representing digital trade finance"
+                  className="w-full h-full object-cover rounded-3xl max-h-[420px]"
+                  style={{ minHeight: '320px', background: '#e0f2fe' }}
                 />
-                */}
               </div>
-              
               {/* Floating elements */}
               <div className="absolute -top-4 -right-4 bg-white rounded-xl p-4 shadow-lg border border-gray-200">
                 <div className="flex items-center space-x-2">
@@ -125,7 +114,6 @@ export function LandingPage({
                   <span className="text-sm font-medium text-gray-700">Live Trading</span>
                 </div>
               </div>
-              
               <div className="absolute -bottom-4 -left-4 bg-gradient-to-r from-blue-500 to-emerald-500 text-white p-4 rounded-xl shadow-lg">
                 <div className="text-sm font-medium">15% APR</div>
                 <div className="text-xs opacity-90">Current Yield</div>
@@ -156,17 +144,9 @@ export function LandingPage({
                   <div className="text-center text-blue-700 space-y-2">
                     <Target className="w-12 h-12 mx-auto" />
                     <div className="text-sm font-medium">Invoice Submission</div>
-                    <div className="text-xs opacity-80">Replace with: African farmer with invoice</div>
+                    <div className="text-xs opacity-80">African exporter submits invoice</div>
                   </div>
                 </div>
-                {/* 
-                Replace with actual image:
-                <img 
-                  src="/african-farmer-invoice.jpg" 
-                  alt="African coffee farmer submitting digital invoice"
-                  className="w-full h-48 object-cover rounded-2xl"
-                />
-                */}
                 <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
                   1
                 </div>
@@ -179,33 +159,25 @@ export function LandingPage({
               </div>
             </div>
 
-            {/* Step 2 */}
+            {/* Step 2 - Updated for Chainlink Functions & Gov API */}
             <div className="text-center space-y-6">
               {/* Step image */}
               <div className="relative mb-6">
                 <div className="w-full h-48 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-2xl flex items-center justify-center overflow-hidden">
                   <div className="text-center text-emerald-700 space-y-2">
                     <Shield className="w-12 h-12 mx-auto" />
-                    <div className="text-sm font-medium">Committee Review</div>
-                    <div className="text-xs opacity-80">Replace with: Committee meeting/validation</div>
+                    <div className="text-sm font-medium">Automated Verification</div>
+                    <div className="text-xs opacity-80">Chainlink Functions + Gov API</div>
                   </div>
                 </div>
-                {/* 
-                Replace with actual image:
-                <img 
-                  src="/committee-validation.jpg" 
-                  alt="Expert committee reviewing trade documents"
-                  className="w-full h-48 object-cover rounded-2xl"
-                />
-                */}
                 <div className="absolute -top-2 -right-2 w-8 h-8 bg-emerald-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
                   2
                 </div>
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">Committee Review</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">Real-Time Verification</h3>
                 <p className="text-gray-600">
-                  Expert committee validates invoices using Chainlink oracles
+                  Chainlink Functions instantly verifies invoices by calling official government APIs—no human committee needed.
                 </p>
               </div>
             </div>
@@ -218,17 +190,9 @@ export function LandingPage({
                   <div className="text-center text-purple-700 space-y-2">
                     <TrendingUp className="w-12 h-12 mx-auto" />
                     <div className="text-sm font-medium">Global Investment</div>
-                    <div className="text-xs opacity-80">Replace with: Global investors/returns</div>
+                    <div className="text-xs opacity-80">Global investors/returns</div>
                   </div>
                 </div>
-                {/* 
-                Replace with actual image:
-                <img 
-                  src="/global-investment.jpg" 
-                  alt="Global investors earning yields from African trade"
-                  className="w-full h-48 object-cover rounded-2xl"
-                />
-                */}
                 <div className="absolute -top-2 -right-2 w-8 h-8 bg-purple-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
                   3
                 </div>
@@ -236,7 +200,7 @@ export function LandingPage({
               <div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-3">Global Investment</h3>
                 <p className="text-gray-600">
-                  DeFi investors fund approved invoices and earn sustainable yields
+                  DeFi investors fund verified invoices and earn sustainable yields
                 </p>
               </div>
             </div>
@@ -311,4 +275,4 @@ export function LandingPage({
       </div>
     </div>
   );
-}
+}  

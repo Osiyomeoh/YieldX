@@ -664,17 +664,35 @@ export function SubmitInvoice() {
     required?: boolean;
   }) => {
     const doc = documents.find(d => d.id === documentType);
+    const isUploaded = !!doc?.file;
+
     return (
       <div className="mt-2 space-y-2">
-        {doc?.file && (
-          <div className="text-sm text-gray-600">
-            📄 {doc.file.name} ({(doc.file.size / 1024).toFixed(1)} KB)
+        <label className="block text-sm font-semibold text-gray-700">
+          {title} {required && <span className="text-red-500">*</span>}
+        </label>
+        {!isUploaded && (
+          <input
+            type="file"
+            onChange={e => handleDocumentUpload(documentType, e.target.files?.[0] || null)}
+            className="block w-full text-sm text-gray-500"
+          />
+        )}
+        {isUploaded && (
+          <div className="space-y-1">
+            {doc?.file && (
+              <div className="text-sm text-gray-600">
+                📄 {doc.file.name}
+                {typeof doc.file.size === 'number' &&
+                  ` (${(doc.file.size / 1024).toFixed(1)} KB)`}
+              </div>
+            )}
+            <div className="flex items-center justify-center space-x-2 text-green-600">
+              <CheckCircle className="w-4 h-4" />
+              <span>Ready</span>
+            </div>
           </div>
         )}
-        <div className="flex items-center justify-center space-x-2 text-green-600">
-          <CheckCircle className="w-4 h-4" />
-          <span>Ready</span>
-        </div>
       </div>
     );
   };

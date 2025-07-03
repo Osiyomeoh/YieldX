@@ -69,16 +69,19 @@ const MockUSDCABI = [
 ];
 
 // Contract addresses from your deployment
+// ✅ PRODUCTION-READY YIELDX PROTOCOL ADDRESSES
 const CONTRACT_ADDRESSES = {
-  USDC: "0x29Aa0e79a83304b59f6b670EBc1Ca515542e3a45" as Address,
-  INVOICE_NFT: "0x5d89fC0D93f97e41cF377D72036ABDEa42Eef9e3" as Address,
-  PRICE_MANAGER: "0x3657FbcC37009B1bc1Ea281D8D4F814b520680B5" as Address,
-  RISK_CALCULATOR: "0xD5Daf6C5659a65bBC59Ba35D2E7d8385f9ef496e" as Address,
-  INVESTMENT_MODULE: "0x15F69a1e4286438bf2998ca5CE0f8213076a4328" as Address,
-  VRF_MODULE: "0x2cF96785b23A35ed6a16F0D0EbA378b46bC3eaF2" as Address,
-  PROTOCOL: "0x1a4906Ea468F61c7A0352287116942A1b982f99C" as Address, // YieldXCore
-  VERIFICATION_MODULE: "0xDb0128B2680935DA2daab9D8dF3D9Eb5C523476d" as Address
-};
+  USDC: "0x6a563Ea24116aa64d2Ea325d6fd3Cefbf20F0FDb", // ✅ mockUSDC
+  INVOICE_NFT: "0xb862eCe2874b75e8Aaba173449EF95c141B95Dc2", // ✅ yieldXNFT  
+  PRICE_MANAGER: "0x8d02c2bFddff0EAc4d01a9E068d5c6971e359b7E", // ✅ priceManager
+  RISK_CALCULATOR: "0x3325272046430788807F49055E3470699AE4a48A", // ✅ riskCalculator
+  INVESTMENT_MODULE: "0xbe20894414bb92269c3d6D36Ff272cFc34AE9247", // ✅ investmentModule
+  VRF_MODULE: "0xA10F5A4E60f8080663A7a88edD6de0B7BFE9EF87", // ✅ vrfModule
+  PROTOCOL: "0x8dFAdc9b2bD255D5c8BE8f43f8FF54FE11EE5dB5", // ✅ yieldXCore  
+  VERIFICATION_MODULE: "0x4402aF89143b8c36fFa6bF75Df99dBc4Beb4c7dc", // ✅ verificationModule (reused working one)
+  FALLBACK_CONTRACT: "0x89f1278566F9C24C078BC1C9FB461479cfCF5183"
+} as const;
+
 
 // YieldX Verification ABI - Since you don't have this file, keep the manual one
 const YIELDX_VERIFICATION_ABI = [
@@ -631,32 +634,309 @@ export const useYieldX = () => {
     }
   }, [writeYieldXCore]);
   
-  // Invest in invoice
-  const investInInvoice = useCallback(async (invoiceId: string, amount: string) => {
+  // ✅ FIXED: Investment function in useYieldX hook - check CORE CONTRACT allowance
+const investInInvoice = useCallback(async (invoiceId: string, amount: string) => {
+  try {
+    setIsLoading(true);
+    setError(null);
+    
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      throw new Error('Invalid investment amount');
+    }
+    
+    console.log(`💰 Starting investment: ${amount} USDC in Invoice ${invoiceId}`);
+    console.log(`👤 Investor address: ${address}`);
+    
+    // Step 1: Validate user balance
+    const userBalance = usdcBalance ? Number(usdcBalance) / 1e6 : 0;
+    if (userBalance < amountNum) {
+      throw new Error(`Insufficient balance. You have ${userBalance.toFixed(2)} USDC but need ${amountNum} USDC`);
+    }
+    
+    // ✅ FIXED: Step 2 - Check allowance for CORE CONTRACT (not Investment Module)
+    console.log('📝 Checking USDC allowance for Core Contract...');
+    const allowance = await getUSDCAllowance(CONTRACT_ADDRESSES.PROTOCOL); // ✅ CORRECT: Core Contract
+    const amountWei = amountNum * 1e6;
+    
+    console.log(`Core Contract allowance: ${allowance / 1e6} USDC, Required: ${amountNum} USDC`);
+    
+    if (allowance < amountWei) {
+      throw new Error(`Insufficient USDC allowance for Core Contract. Current: ${(allowance/1e6).toFixed(2)} USDC, Need: ${amountNum} USDC. Please approve USDC first.`);
+    }
+    
+    // Step 3: Validate invoice
+    console.log('📝 Validating invoice...');
+    const invoiceBasics = await getInvoiceBasics(invoiceId);
+    const invoiceFinancials = await getInvoiceFinancials(invoiceId);
+    
+    if (!invoiceBasics || !invoiceFinancials) {
+      throw new Error('Could not fetch invoice details');
+    }
+    
+    console.log(`✅ Invoice ${invoiceId} status: ${invoiceBasics.status} (need 2 for Verified)`);
+    console.log(`✅ Invoice APR: ${invoiceFinancials.aprBasisPoints} basis points`);
+    console.log(`✅ Invoice supplier: ${invoiceBasics.supplier}`);
+    console.log(`✅ Your address: ${address}`);
+    
+    if (invoiceBasics.status !== 2) {
+      throw new Error(`Invoice not available for investment. Status: ${invoiceBasics.status} (need 2 for Verified)`);
+    }
+    
+    if (invoiceFinancials.aprBasisPoints <= 0) {
+      throw new Error('Invoice has no APR set. Verification may not be complete.');
+    }
+    
+    const remainingFunding = (invoiceFinancials.targetFunding - invoiceFinancials.currentFunding) / 1e6;
+    if (amountNum > remainingFunding) {
+      throw new Error(`Investment amount (${amountNum}) exceeds remaining funding (${remainingFunding.toFixed(2)})`);
+    }
+    
+    // Pre-check: Are you the supplier?
+    if (invoiceBasics.supplier.toLowerCase() === address?.toLowerCase()) {
+      throw new Error('Supplier cannot invest in own invoice. Please use a different wallet address to invest.');
+    }
+    
+    // Step 4: Submit transaction
+    console.log('🔄 Preparing transaction for wallet confirmation...');
+    console.log('💡 Please check your wallet for the transaction confirmation popup!');
+    
+    if (!walletClient) {
+      throw new Error('Wallet client not available. Please reconnect your wallet.');
+    }
+    
+    if (!publicClient) {
+      throw new Error('Public client not available. Please check your network connection.');
+    }
+    
     try {
-      setIsLoading(true);
-      setError(null);
+      console.log('🚀 Sending transaction to wallet for confirmation...');
       
-      console.log(`💰 Investing ${amount} USDC in invoice ${invoiceId}`);
+      const transactionArgs = [BigInt(invoiceId), parseUnits(amount, 6)];
       
-      const tx = await writeYieldXCore({
-        address: CONTRACT_ADDRESSES.PROTOCOL,
-        abi: YieldXCoreABI,
+      const investInInvoiceAbi = YieldXCoreABI.find(
+        (item: any) => item.type === 'function' && item.name === 'investInInvoice'
+      );
+      
+      if (!investInInvoiceAbi) {
+        throw new Error('investInInvoice function not found in contract ABI');
+      }
+      
+      // ✅ CORRECT: Call Core Contract (which handles the allowance check)
+      const txHash = await walletClient.writeContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL as `0x${string}`,
+        abi: [investInInvoiceAbi],
         functionName: 'investInInvoice',
-        args: [BigInt(invoiceId), parseUnits(amount, 6)],
+        args: transactionArgs,
+        account: address as `0x${string}`,
       });
       
-      console.log('✅ Investment successful! TX:', tx);
-      return { success: true, txHash: tx };
+      console.log('✅ Transaction confirmed by user!');
+      console.log('✅ Transaction hash:', txHash);
       
-    } catch (error) {
-      console.error('❌ Error investing:', error);
-      setError(error instanceof Error ? error.message : 'Failed to invest');
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    } finally {
-      setIsLoading(false);
+      // Wait for transaction confirmation
+      console.log('⏳ Waiting for blockchain confirmation...');
+      
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash,
+        timeout: 60000,
+      });
+      
+      if (receipt.status === 'success') {
+        console.log('🎉 Transaction confirmed on blockchain!');
+        console.log('📄 Receipt:', receipt);
+        
+        return { 
+          success: true, 
+          txHash: txHash,
+          message: `Investment successful! ${amount} USDC invested in Invoice #${invoiceId}`,
+          receipt: receipt
+        };
+      } else {
+        throw new Error('Transaction failed on blockchain');
+      }
+      
+    } catch (walletError: any) {
+      console.error('❌ Detailed wallet error:', walletError);
+      
+      // Handle user rejection
+      if (walletError?.name === 'UserRejectedRequestError' || 
+          walletError?.message?.includes('User rejected') ||
+          walletError?.message?.includes('user rejected') ||
+          walletError?.code === 4001) {
+        throw new Error('Transaction was cancelled by user');
+      }
+      
+      // Extract specific contract error messages
+      let errorMessage = 'Transaction failed';
+      
+      if (walletError?.cause?.reason) {
+        errorMessage = `Contract error: ${walletError.cause.reason}`;
+      } else if (walletError?.shortMessage) {
+        errorMessage = `Contract error: ${walletError.shortMessage}`;
+      } else if (walletError?.details) {
+        errorMessage = `Contract error: ${walletError.details}`;
+      } else if (walletError?.message?.includes('execution reverted')) {
+        const patterns = [
+          /execution reverted: (.+?)(\"|$)/,
+          /reverted with reason string '(.+?)'/,
+          /revert (.+?)(\"|$)/,
+          /'(.+?)'/
+        ];
+        
+        for (const pattern of patterns) {
+          const match = walletError.message.match(pattern);
+          if (match && match[1]) {
+            errorMessage = `Contract error: ${match[1]}`;
+            break;
+          }
+        }
+        
+        if (errorMessage === 'Transaction failed') {
+          errorMessage = `Contract execution reverted: ${walletError.message}`;
+        }
+      } else if (walletError?.message?.includes('insufficient funds')) {
+        errorMessage = 'Insufficient funds for gas fee';
+      } else if (walletError?.message?.includes('gas')) {
+        errorMessage = 'Gas estimation failed. Transaction may revert.';
+      } else if (walletError?.message) {
+        errorMessage = `Wallet error: ${walletError.message}`;
+      }
+      
+      console.log('🔍 Final extracted error message:', errorMessage);
+      throw new Error(errorMessage);
     }
-  }, [writeYieldXCore]);
+    
+  } catch (error) {
+    console.error('❌ Investment failed:', error);
+    
+    let errorMessage = 'Investment failed';
+    if (error instanceof Error) {
+      if (error.message.includes('insufficient allowance') || error.message.includes('Insufficient USDC allowance')) {
+        errorMessage = 'Please approve USDC for Core Contract first';
+      } else if (error.message.includes('exceeds')) {
+        errorMessage = 'Investment amount too high';
+      } else if (error.message.includes('cancelled') || error.message.includes('rejected')) {
+        errorMessage = 'Transaction was cancelled by user';
+      } else if (error.message.includes('insufficient balance') || error.message.includes('Insufficient funds')) {
+        errorMessage = 'Insufficient funds for transaction';
+      } else if (error.message.includes('not available for investment')) {
+        errorMessage = 'Invoice not ready for investment';
+      } else if (error.message.includes('Supplier cannot invest')) {
+        errorMessage = 'You cannot invest in your own invoice. Please use a different wallet address.';
+      } else if (error.message.includes('Contract error:')) {
+        errorMessage = error.message; // Keep contract errors as-is
+      } else if (error.message.includes('Wallet client not available')) {
+        errorMessage = 'Please reconnect your wallet and try again';
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
+    setError(errorMessage);
+    return { 
+      success: false, 
+      error: errorMessage,
+      details: error instanceof Error ? error.message : 'Unknown error'
+    };
+  } finally {
+    setIsLoading(false);
+  }
+}, [
+  walletClient,
+  publicClient,
+  getUSDCAllowance, 
+  getInvoiceBasics, 
+  getInvoiceFinancials,
+  usdcBalance, 
+  setIsLoading, 
+  setError,
+  address
+]);
+
+// ✅ FIXED: Approve USDC function with proper error handling
+// const approveUSDC = useCallback(async (spender: string, amount: string) => {
+//   try {
+//     setIsLoading(true);
+//     setError(null);
+    
+//     const amountNum = parseFloat(amount);
+//     if (isNaN(amountNum) || amountNum <= 0) {
+//       throw new Error('Invalid approval amount');
+//     }
+    
+//     console.log(`💳 Approving ${amount} USDC for ${spender}`);
+//     console.log(`💳 Spender should be Investment Module: ${CONTRACT_ADDRESSES.INVESTMENT_MODULE}`);
+    
+//     // Check current balance
+//     const balance = usdcBalance ? Number(usdcBalance) / 1e6 : 0;
+//     if (balance < amountNum) {
+//       throw new Error(`Insufficient USDC balance. You have ${balance.toFixed(2)} USDC but trying to approve ${amountNum} USDC`);
+//     }
+    
+//     // Check current allowance
+//     const currentAllowance = await getUSDCAllowance(spender);
+//     console.log(`💳 Current allowance for ${spender}: ${currentAllowance / 1e6} USDC`);
+    
+//     // Use a large approval amount to avoid repeated approvals
+//     const approvalAmount = Math.max(amountNum * 2, 10000); // Approve 2x the amount or 10,000 USDC minimum
+    
+//     console.log(`💳 Approving ${approvalAmount} USDC for ${spender}`);
+    
+//     try {
+//       // ✅ FIXED: Use writeContract correctly with proper error handling
+//       const approveTx = await writeUSDC({
+//         address: CONTRACT_ADDRESSES.USDC,
+//         abi: MockUSDCABI,
+//         functionName: 'approve',
+//         args: [spender as Address, parseUnits(approvalAmount.toString(), 6)],
+//       });
+      
+//       console.log('✅ USDC approval transaction submitted:', approveTx);
+      
+//       // Check if we got a valid transaction hash
+//       if (!approveTx || typeof approveTx !== 'string') {
+//         throw new Error('Approval transaction failed - invalid response from wallet');
+//       }
+      
+//       // Wait for transaction confirmation
+//       await new Promise(resolve => setTimeout(resolve, 3000));
+      
+//       // Verify approval
+//       const newAllowance = await getUSDCAllowance(spender);
+//       console.log(`💳 New allowance for ${spender}: ${newAllowance / 1e6} USDC`);
+      
+//       if (newAllowance >= parseUnits(amount, 6)) {
+//         console.log('✅ USDC approval confirmed!');
+//         return { 
+//           success: true, 
+//           txHash: approveTx,
+//           message: `Successfully approved ${approvalAmount} USDC spending for ${spender}`
+//         };
+//       } else {
+//         throw new Error('Approval verification failed');
+//       }
+      
+//     } catch (wagmiError: any) {
+//       console.error('❌ Wagmi approval error:', wagmiError);
+      
+//       if (wagmiError?.message?.includes('User rejected')) {
+//         throw new Error('Approval was cancelled by user');
+//       } else {
+//         throw new Error(`Approval failed: ${wagmiError.message || 'Unknown error'}`);
+//       }
+//     }
+    
+//   } catch (error) {
+//     console.error('❌ USDC approval failed:', error);
+//     const errorMessage = error instanceof Error ? error.message : 'Failed to approve USDC';
+//     setError(errorMessage);
+//     return { success: false, error: errorMessage };
+//   } finally {
+//     setIsLoading(false);
+//   }
+// }, [writeUSDC, getUSDCAllowance, usdcBalance, setIsLoading, setError]);
+  
   
   // Start document verification with real form data
   const startDocumentVerification = useCallback(async (verificationData: {
@@ -705,31 +985,127 @@ export const useYieldX = () => {
   
   // Approve USDC spending
   const approveUSDC = useCallback(async (spender: string, amount: string) => {
+    if (!address || !walletClient || !publicClient) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+  
     try {
       setIsLoading(true);
       setError(null);
       
+      const amountNum = parseFloat(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        throw new Error('Invalid approval amount');
+      }
+      
       console.log(`💳 Approving ${amount} USDC for ${spender}`);
+      console.log(`💳 Spender should be Investment Module: ${CONTRACT_ADDRESSES.INVESTMENT_MODULE}`);
+      console.log(`💳 Please check your wallet for the approval transaction!`);
       
-      const tx = await writeUSDC({
-        address: CONTRACT_ADDRESSES.USDC,
-        abi: MockUSDCABI,
-        functionName: 'approve',
-        args: [spender as Address, parseUnits(amount, 6)],
-      });
+      // ✅ REMOVED: Balance check for approval - you can approve more than your balance!
+      // ERC20 approvals are just setting spending limits, not transferring tokens
       
-      console.log('✅ USDC approved! TX:', tx);
-      return { success: true, txHash: tx };
+      // Check current allowance
+      const currentAllowance = await getUSDCAllowance(spender);
+      console.log(`💳 Current allowance for ${spender}: ${currentAllowance / 1e6} USDC`);
+      
+      // Use a large approval amount to avoid repeated approvals
+      const approvalAmount = Math.max(amountNum * 5, 50000); // Approve 5x the amount or 50,000 USDC minimum
+      
+      console.log(`💳 Approving ${approvalAmount} USDC for ${spender}...`);
+      
+      try {
+        // ✅ FIXED: Use walletClient directly - this WILL wait for user confirmation
+        const approveTx = await walletClient.writeContract({
+          address: CONTRACT_ADDRESSES.USDC as `0x${string}`,
+          abi: MockUSDCABI,
+          functionName: 'approve',
+          args: [spender as `0x${string}`, parseUnits(approvalAmount.toString(), 6)],
+          account: address as `0x${string}`,
+        });
+        
+        console.log('✅ Approval transaction confirmed by user!');
+        console.log('✅ Transaction hash:', approveTx);
+        
+        // Check if we got a valid transaction hash
+        if (!approveTx || typeof approveTx !== 'string' || approveTx.length < 10) {
+          throw new Error('Approval transaction failed - invalid transaction hash');
+        }
+        
+        // Wait for blockchain confirmation
+        console.log('⏳ Waiting for blockchain confirmation...');
+        const receipt = await publicClient.waitForTransactionReceipt({
+          hash: approveTx,
+          timeout: 60000, // 60 second timeout
+        });
+        
+        if (receipt.status === 'success') {
+          console.log('🎉 Approval confirmed on blockchain!');
+          
+          // Verify approval
+          const newAllowance = await getUSDCAllowance(spender);
+          console.log(`💳 New allowance for ${spender}: ${newAllowance / 1e6} USDC`);
+          
+          if (newAllowance >= parseUnits(amount, 6)) {
+            console.log('✅ USDC approval verification successful!');
+            return { 
+              success: true, 
+              txHash: approveTx,
+              message: `Successfully approved ${approvalAmount.toLocaleString()} USDC for Investment Module!`
+            };
+          } else {
+            throw new Error('Approval verification failed - allowance not set correctly');
+          }
+        } else {
+          throw new Error('Approval transaction was reverted by blockchain');
+        }
+        
+      } catch (walletError: any) {
+        console.error('❌ Wallet approval error:', walletError);
+        console.error('❌ Error details:', {
+          name: walletError?.name,
+          message: walletError?.message,
+          code: walletError?.code,
+          cause: walletError?.cause,
+        });
+        
+        // Handle user rejection
+        if (walletError?.name === 'UserRejectedRequestError' || 
+            walletError?.message?.includes('User rejected') ||
+            walletError?.message?.includes('user rejected') ||
+            walletError?.code === 4001) {
+          throw new Error('Approval was cancelled by user');
+        }
+        
+        // Handle insufficient gas
+        if (walletError?.message?.includes('insufficient funds for intrinsic transaction cost')) {
+          throw new Error('Insufficient ETH for gas fees');
+        }
+        
+        // Handle other wallet errors
+        if (walletError?.message?.includes('execution reverted')) {
+          throw new Error('Approval transaction failed - please try again');
+        }
+        
+        throw new Error(`Approval failed: ${walletError?.message || 'Unknown wallet error'}`);
+      }
       
     } catch (error) {
-      console.error('❌ Error approving USDC:', error);
-      setError(error instanceof Error ? error.message : 'Failed to approve USDC');
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      console.error('❌ USDC approval failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to approve USDC';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setIsLoading(false);
     }
-  }, [writeUSDC]);
-  
+  }, [
+    address, 
+    walletClient, 
+    publicClient, 
+    getUSDCAllowance, 
+    setIsLoading, 
+    setError
+  ]); // ✅ REMOVED usdcBalance dependency
   // Mint test USDC
   const mintTestUSDC = useCallback(async (amount: string) => {
     try {
@@ -878,6 +1254,444 @@ export const useYieldX = () => {
     return { basics, parties, financials, locations, metadata };
   }, [getInvoiceBasics, getInvoiceParties, getInvoiceFinancials, getInvoiceLocations, getInvoiceMetadata]);
   
+  const getCompleteInvestmentDetails = useCallback(async (invoiceId: string) => {
+    try {
+      console.log(`📊 Getting complete investment details for invoice ${invoiceId}`);
+      
+      // Get all invoice data in parallel
+      const [
+        basics,
+        parties, 
+        financials,
+        locations,
+        metadata,
+        verification,
+        investmentBasics
+      ] = await Promise.all([
+        getInvoiceBasics(invoiceId),
+        getInvoiceParties(invoiceId),
+        getInvoiceFinancials(invoiceId),
+        getInvoiceLocations(invoiceId),
+        getInvoiceMetadata(invoiceId),
+        getVerificationData(invoiceId),
+        getInvestmentBasics(invoiceId)
+      ]);
+      
+      if (!basics || !parties || !financials) {
+        console.log(`❌ Missing basic data for invoice ${invoiceId}`);
+        return null;
+      }
+      
+      // Calculate additional fields
+      const currentAPR = financials.aprBasisPoints / 100; // Convert basis points to percentage
+      const totalAmount = basics.amount / 1e6; // Convert to USDC
+      const targetFunding = financials.targetFunding / 1e6;
+      const currentFunding = financials.currentFunding / 1e6;
+      const remainingFunding = targetFunding - currentFunding;
+      const fundingProgress = targetFunding > 0 ? (currentFunding / targetFunding) * 100 : 0;
+      
+      // Calculate time to maturity
+      const now = Math.floor(Date.now() / 1000);
+      const daysToMaturity = Math.max(0, Math.floor((financials.dueDate - now) / (24 * 60 * 60)));
+      
+      // Risk assessment
+      const riskLevel = verification?.risk || 50;
+      const riskCategory = riskLevel <= 25 ? 'Low' : riskLevel <= 50 ? 'Medium' : riskLevel <= 75 ? 'High' : 'Very High';
+      
+      const completeDetails = {
+        // Basic info
+        id: Number(invoiceId),
+        status: basics.status,
+        supplier: basics.supplier,
+        buyer: parties.buyer,
+        
+        // Financial details
+        totalAmount,
+        targetFunding,
+        currentFunding,
+        remainingFunding,
+        fundingProgress,
+        apr: currentAPR,
+        aprBasisPoints: financials.aprBasisPoints,
+        
+        // Investment details
+        numInvestors: investmentBasics?.numInvestors || 0,
+        minInvestment: Math.max(100, remainingFunding * 0.01), // 1% of remaining or $100 min
+        maxInvestment: remainingFunding,
+        
+        // Trade details
+        commodity: parties.commodity,
+        exporterName: parties.exporterName,
+        buyerName: parties.buyerName,
+        supplierCountry: locations?.supplierCountry || '',
+        buyerCountry: locations?.buyerCountry || '',
+        
+        // Timeline
+        submittedDate: metadata?.createdAt || 0,
+        dueDate: financials.dueDate,
+        daysToMaturity,
+        
+        // Verification & Risk
+        documentVerified: metadata?.documentVerified || false,
+        riskScore: verification?.risk || 0,
+        riskCategory,
+        creditRating: verification?.rating || 'N/A',
+        
+        // Display helpers
+        isAvailable: basics.status === 2 && remainingFunding > 0, // Verified and has remaining funding
+        isFullyFunded: currentFunding >= targetFunding,
+        tradeDuration: daysToMaturity + 30, // Approximate trade duration
+        
+        // Formatted strings for display
+        formatted: {
+          totalAmount: `$${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          targetFunding: `$${targetFunding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          currentFunding: `$${currentFunding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          remainingFunding: `$${remainingFunding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          apr: `${currentAPR.toFixed(2)}%`,
+          fundingProgress: `${fundingProgress.toFixed(1)}%`,
+          submittedDate: new Date((metadata?.createdAt || 0) * 1000).toLocaleDateString(),
+          dueDate: new Date(financials.dueDate * 1000).toLocaleDateString(),
+          tradeRoute: `${locations?.supplierCountry || ''} → ${locations?.buyerCountry || ''}`,
+        }
+      };
+      
+      console.log(`✅ Complete investment details for invoice ${invoiceId}:`, completeDetails);
+      return completeDetails;
+      
+    } catch (error) {
+      console.error(`❌ Error getting complete investment details for invoice ${invoiceId}:`, error);
+      return null;
+    }
+  }, [
+    getInvoiceBasics,
+    getInvoiceParties,
+    getInvoiceFinancials,
+    getInvoiceLocations,
+    getInvoiceMetadata,
+    getVerificationData,
+    getInvestmentBasics
+  ]);
+  
+  // Get ALL available investment opportunities with complete details
+  const getAllInvestmentOpportunities = useCallback(async () => {
+    try {
+      console.log('📊 Getting all investment opportunities with complete details...');
+      
+      // Get list of verified invoice IDs
+      const opportunityIds = await getInvestmentOpportunities();
+      console.log(`Found ${opportunityIds.length} investment opportunities:`, opportunityIds);
+      
+      if (opportunityIds.length === 0) {
+        console.log('ℹ️ No investment opportunities available');
+        return [];
+      }
+      
+      // Get complete details for each opportunity
+      const opportunities = await Promise.all(
+        opportunityIds.map(async (invoiceId) => {
+          const details = await getCompleteInvestmentDetails(invoiceId.toString());
+          return details;
+        })
+      );
+      
+      // Filter out any null results and sort by APR (highest first)
+      const validOpportunities = opportunities
+        .filter(Boolean)
+        .sort((a, b) => (b?.apr || 0) - (a?.apr || 0));
+      
+      console.log(`✅ Retrieved ${validOpportunities.length} complete investment opportunities`);
+      return validOpportunities;
+      
+    } catch (error) {
+      console.error('❌ Error getting all investment opportunities:', error);
+      return [];
+    }
+  }, [getInvestmentOpportunities, getCompleteInvestmentDetails]);
+  
+  // Get user's investment portfolio with details
+  const getInvestorPortfolio = useCallback(async (investorAddress?: string) => {
+    if (!investorAddress) return [];
+    
+    try {
+      console.log(`💼 Getting investment portfolio for ${investorAddress}`);
+      
+      // Get list of invoices this investor has invested in
+      const investedInvoiceIds = await getInvestorInvoices(investorAddress);
+      console.log(`Found ${investedInvoiceIds.length} investments:`, investedInvoiceIds);
+      
+      if (investedInvoiceIds.length === 0) {
+        return [];
+      }
+      
+      // Get complete details for each investment
+      const portfolio = await Promise.all(
+        investedInvoiceIds.map(async (invoiceId) => {
+          const details = await getCompleteInvestmentDetails(invoiceId.toString());
+          if (!details) return null;
+          
+          // Get investor's specific investment amount
+          const investmentAmount = await getInvestorData(investorAddress, invoiceId.toString());
+          const investmentAmountUSDC = (investmentAmount || 0) / 1e6;
+          
+          // Calculate investor's share
+          const investorShare = details.currentFunding > 0 ? 
+            (investmentAmountUSDC / details.currentFunding) * 100 : 0;
+          
+          // Calculate potential returns
+          const potentialReturn = investmentAmountUSDC * (1 + details.apr / 100);
+          const potentialProfit = potentialReturn - investmentAmountUSDC;
+          
+          return {
+            ...details,
+            investment: {
+              amount: investmentAmountUSDC,
+              share: investorShare,
+              potentialReturn,
+              potentialProfit,
+              formatted: {
+                amount: `$${investmentAmountUSDC.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                share: `${investorShare.toFixed(2)}%`,
+                potentialReturn: `$${potentialReturn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                potentialProfit: `$${potentialProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              }
+            }
+          };
+        })
+      );
+      
+      // Filter out null results and sort by investment amount (largest first)
+      const validPortfolio = portfolio
+        .filter(Boolean)
+        .sort((a, b) => (b?.investment?.amount || 0) - (a?.investment?.amount || 0));
+      
+      console.log(`✅ Retrieved portfolio with ${validPortfolio.length} investments`);
+      return validPortfolio;
+      
+    } catch (error) {
+      console.error('❌ Error getting investor portfolio:', error);
+      return [];
+    }
+  }, [getInvestorInvoices, getCompleteInvestmentDetails, getInvestorData]);
+  
+  // ============ ADDITIONAL MISSING YIELDX FUNCTIONS ============
+  
+  // Get supplier invoices
+  const getSupplierInvoices = useCallback(async (supplierAddress: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getSupplierInvoices',
+        args: [supplierAddress as Address],
+      }) as bigint[] | undefined;
+      
+      return result?.map(id => Number(id)) || [];
+    } catch (error) {
+      console.error('Error getting supplier invoices:', error);
+      return [];
+    }
+  }, [publicClient]);
+  
+  // Get invoice status only
+  const getInvoiceStatus = useCallback(async (invoiceId: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getInvoiceStatus',
+        args: [BigInt(invoiceId)],
+      }) as number | undefined;
+      
+      return result !== undefined ? result : null;
+    } catch (error) {
+      console.error('Error getting invoice status:', error);
+      return null;
+    }
+  }, [publicClient]);
+  
+  // Check if invoice is verified
+  const isInvoiceVerified = useCallback(async (invoiceId: string) => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'isInvoiceVerified',
+        args: [BigInt(invoiceId)],
+      }) as boolean | undefined;
+      
+      return result || false;
+    } catch (error) {
+      console.error('Error checking if invoice is verified:', error);
+      return false;
+    }
+  }, [publicClient]);
+  
+  // Get contract version
+  const getVersion = useCallback(async () => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'version',
+      }) as string | undefined;
+      
+      return result;
+    } catch (error) {
+      console.error('Error getting version:', error);
+      return null;
+    }
+  }, [publicClient]);
+  
+  // Get contract info
+  const getContractInfo = useCallback(async () => {
+    try {
+      const result = await publicClient?.readContract({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'getContractInfo',
+      }) as [string, string, string, boolean, bigint] | undefined;
+      
+      if (!result) return null;
+      
+      const [name, version, owner, paused, totalInvoices] = result;
+      
+      return {
+        name,
+        version,
+        owner,
+        paused,
+        totalInvoices: Number(totalInvoices),
+      };
+    } catch (error) {
+      console.error('Error getting contract info:', error);
+      return null;
+    }
+  }, [publicClient]);
+  
+  // Initialize protocol (admin function)
+  const initializeProtocol = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('⚙️ Initializing protocol...');
+      
+      const tx = await writeYieldXCore({
+        address: CONTRACT_ADDRESSES.PROTOCOL,
+        abi: YieldXCoreABI,
+        functionName: 'initializeProtocol',
+      });
+      
+      console.log('✅ Protocol initialized! TX:', tx);
+      return { success: true, txHash: tx };
+      
+    } catch (error) {
+      console.error('❌ Error initializing protocol:', error);
+      setError(error instanceof Error ? error.message : 'Failed to initialize protocol');
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [writeYieldXCore]);
+  
+  // ============ HELPER FUNCTIONS ============
+  
+  // Get invoice status name
+  const getInvoiceStatusName = useCallback((status: number) => {
+    const statusNames = [
+      "Submitted",     // 0
+      "Verifying",     // 1
+      "Verified",      // 2
+      "FullyFunded",   // 3
+      "Approved",      // 4
+      "Funded",        // 5
+      "Repaid",        // 6
+      "Defaulted",     // 7
+      "Rejected"       // 8
+    ];
+    
+    return statusNames[status] || 'Unknown';
+  }, []);
+  
+  // Debug function to check entire flow
+  const debugInvoiceFlow = useCallback(async () => {
+    console.log("🔍 DEBUGGING YIELDX INVOICE FLOW");
+    console.log("=====================================");
+    
+    try {
+      const totalInvoices = invoiceCounter || 0;
+      console.log(`📊 Total invoices submitted: ${totalInvoices}`);
+      
+      if (totalInvoices === 0) {
+        console.log("❌ No invoices found! Submit an invoice first.");
+        return;
+      }
+      
+      console.log("\n📋 Checking invoice statuses:");
+      const statusNames = [
+        "Submitted", "Verifying", "Verified", "FullyFunded", 
+        "Approved", "Funded", "Repaid", "Defaulted", "Rejected"
+      ];
+      
+      for (let i = 1; i <= totalInvoices; i++) {
+        try {
+          console.log(`\n🔍 Invoice ${i}:`);
+          
+          const basics = await getInvoiceBasics(i.toString());
+          if (!basics) {
+            console.log(`  ❌ Could not get basic info for invoice ${i}`);
+            continue;
+          }
+          
+          console.log(`  Status: ${basics.status} (${statusNames[basics.status] || 'Unknown'})`);
+          console.log(`  Amount: ${(basics.amount / 1e6).toFixed(2)} USDC`);
+          console.log(`  Supplier: ${basics.supplier}`);
+          
+          const verification = await getVerificationData(i.toString());
+          if (verification) {
+            console.log(`  Verification - Completed: ${verification.verified}, Valid: ${verification.valid}`);
+            console.log(`  Risk Score: ${verification.risk}, Rating: ${verification.rating}`);
+            console.log(`  Details: ${verification.details}`);
+          } else {
+            console.log(`  ❌ No verification data found`);
+          }
+          
+          if (basics.status === 2) {
+            console.log(`  ✅ Invoice ${i} should be available for investment!`);
+          } else if (basics.status === 1) {
+            console.log(`  ⏳ Invoice ${i} is stuck in verification...`);
+          } else {
+            console.log(`  ℹ️ Invoice ${i} not ready for investment (status: ${statusNames[basics.status]})`);
+          }
+          
+        } catch (error) {
+          console.log(`  ❌ Error checking invoice ${i}:`, error);
+        }
+      }
+      
+      console.log("\n💰 Checking investment opportunities:");
+      const opportunities = await getInvestmentOpportunities();
+      console.log(`Available opportunities: ${opportunities.length}`);
+      console.log(`Invoice IDs: [${opportunities.join(', ')}]`);
+      
+      if (opportunities.length === 0) {
+        console.log("❌ No investment opportunities found!");
+        console.log("🔧 Possible issues:");
+        console.log("  - Invoices stuck in 'Verifying' status (verification callback failed)");
+        console.log("  - Verification module core contract not set correctly");
+        console.log("  - Chainlink Functions not completing");
+      }
+      
+    } catch (error) {
+      console.error("❌ Debug failed:", error);
+    }
+  }, [
+    invoiceCounter,
+    getInvoiceBasics,
+    getVerificationData,
+    getInvestmentOpportunities
+  ]);
   // getFunctionsConfig: stub
   const getFunctionsConfig = useCallback(async () => null, []);
   
@@ -925,6 +1739,10 @@ export const useYieldX = () => {
     getInvoicesByStatus,
     submitInvoice,
     investInInvoice,
+
+    getCompleteInvestmentDetails,
+  getAllInvestmentOpportunities,
+  getInvestorPortfolio,
     
     // Verification functions
     getVerificationData,
